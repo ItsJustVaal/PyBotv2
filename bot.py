@@ -1,10 +1,11 @@
+import logging
 import os
 
 import discord
 from discord.ext import commands
 from sqlalchemy.exc import InvalidRequestError
 
-from config import TOKEN
+from config import ALLOWED_CHANNELS, TOKEN
 from db.session import SessionLocal, init_db
 
 # ~~~~ SET INTENTS ~~~~
@@ -18,6 +19,17 @@ class PyBot(commands.Bot):
         super().__init__(command_prefix=".", intents=intents)
         self._db = None  # type: ignore
         self.locked = False
+        self.add_check(self.global_channel_check)
+
+        # ~~~~ SET LOGGING ~~~~
+        self.logger = logging.getLogger("PyBot")
+        self.logger.setLevel(logging.INFO)
+
+        if not self.logger.hasHandlers():
+            handler = logging.StreamHandler()
+            formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+            handler.setFormatter(formatter)
+            self.logger.addHandler(handler)
 
     # Sets a DB session
     @property
@@ -37,16 +49,41 @@ class PyBot(commands.Bot):
 
     # Verify tables - hook up cogs to bot
     async def setup_hook(self):
+        self.logger.info("[STARTUP] Setting DB Session")
         init_db()
+        self.logger.info("[STARTUP] Loading Cogs")
         for file in os.listdir("cogs"):
             if file.endswith(".py") and file != "__init__.py":
                 ext = f"cogs.{file[:-3]}"
                 await self.load_extension(ext)
+        bot.logger.info("[STARTUP] Bot is Live")
+
+    def global_channel_check(self, ctx: commands.Context) -> bool:
+        if str(ctx.channel.id) not in ALLOWED_CHANNELS:  # type: ignore
+            return False
+        return True
+
+    async def on_command(self, ctx: commands.Context):
+        if str(ctx.channel.id) not in ALLOWED_CHANNELS:  # type: ignore
+            return
+        self.logger.info(f"[CMD] {ctx.author} ran '{ctx.command}' in {ctx.channel}")
+
+    async def on_command_error(self, ctx: commands.Context, error):
+        if str(ctx.channel.id) not in ALLOWED_CHANNELS:  # type: ignore
+            self.logger.info(
+                f"[IGNORED] {ctx.author} tried to run '{ctx.command}' in disallowed channel {ctx.channel.name}"  # type: ignore
+            )
+            return
+        self.logger.error(f"[ERROR] {ctx.command} by {ctx.author}: {error}")
+        if isinstance(error, commands.CheckFailure):
+            await ctx.reply("Nice try loser")
+        else:
+            await ctx.reply("An error occurred.")
 
 
 # Instantiate a bot
 bot: PyBot = PyBot()
 
+
 if __name__ == "__main__":
-    print("Bot is live")
     bot.run(token=TOKEN)  # type: ignore

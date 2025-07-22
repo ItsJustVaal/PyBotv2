@@ -23,11 +23,8 @@ def is_locked():
 
 # Admin Check — match by Discord user ID
 def is_admin():
-    async def predicate(ctx: Context):
-        if ctx.author.id is not ADMIN:
-            await ctx.reply("Nice try loser")
-            raise commands.CheckFailure("Not an admin.")
-        return True
+    def predicate(ctx: commands.Context):
+        return str(ctx.author.id) == ADMIN
 
     return commands.check(predicate)
 

@@ -2,3 +2,5 @@
 notes.txt
 PybotV2.sqlite3
 __pycache__
+data
+venv
