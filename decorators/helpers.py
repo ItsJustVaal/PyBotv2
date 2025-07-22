@@ -1,12 +1,10 @@
 # helpers.py
-import os
 
 from discord.ext import commands
 from discord.ext.commands import Context
 
 from bot import bot
-
-ADMIN = os.getenv("ADMIN")
+from config import ADMIN
 
 
 # Locked Check

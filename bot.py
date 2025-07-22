@@ -1,15 +1,9 @@
-import os
-
 import discord
 from discord.ext import commands
-from dotenv import load_dotenv
 from sqlalchemy.exc import InvalidRequestError
 
+from config import TOKEN
 from db.session import SessionLocal, init_db
-
-# ~~~~ LOAD ENV VARIABLES ~~~~
-load_dotenv()
-TOKEN = os.getenv(key="TOKEN")
 
 # ~~~~ SET INTENTS ~~~~
 intents: discord.Intents = discord.Intents.default()
@@ -42,10 +36,10 @@ class PyBot(commands.Bot):
     # Verify tables - hook up cogs to bot
     async def setup_hook(self):
         init_db()
-        for file in os.listdir("cogs"):
-            if file.endswith(".py"):
-                ext = f"cogs.{file[:-3]}"
-                await self.load_extension(ext)
+        # for file in os.listdir("cogs"):
+        #     if file.endswith(".py"):
+        #         ext = f"cogs.{file[:-3]}"
+        #         await self.load_extension(ext)
 
 
 # Instantiate a bot
