@@ -48,6 +48,9 @@ class PyBot(commands.Bot):
                 await self.load_extension(ext)
 
 
+# Instantiate a bot
+bot = PyBot()
+
 if __name__ == "__main__":
     print("Bot is live")
-    PyBot().run(token=TOKEN)  # type: ignore
+    bot.run(token=TOKEN)  # type: ignore
