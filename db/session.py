@@ -1,11 +1,13 @@
+import os
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from db.models import *
 
-DATABASE_URL = "sqlite:///PybotV2.sqlite3"
+DATABASE_URL = os.getenv("DATABASE")
 
-engine = create_engine(DATABASE_URL, echo=False, future=True)
+engine = create_engine(DATABASE_URL, echo=False, future=True)  # type: ignore
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 
