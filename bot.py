@@ -1,3 +1,5 @@
+import os
+
 import discord
 from discord.ext import commands
 from sqlalchemy.exc import InvalidRequestError
@@ -36,14 +38,14 @@ class PyBot(commands.Bot):
     # Verify tables - hook up cogs to bot
     async def setup_hook(self):
         init_db()
-        # for file in os.listdir("cogs"):
-        #     if file.endswith(".py"):
-        #         ext = f"cogs.{file[:-3]}"
-        #         await self.load_extension(ext)
+        for file in os.listdir("cogs"):
+            if file.endswith(".py") and file != "__init__.py":
+                ext = f"cogs.{file[:-3]}"
+                await self.load_extension(ext)
 
 
 # Instantiate a bot
-bot = PyBot()
+bot: PyBot = PyBot()
 
 if __name__ == "__main__":
     print("Bot is live")
