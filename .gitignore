@@ -1,0 +1,4 @@
+.env
+notes.txt
+PybotV2.sqlite3
+__pycache__
