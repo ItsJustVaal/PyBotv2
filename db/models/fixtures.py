@@ -6,7 +6,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from .base import Base
 
 
-class Fixtures(Base):
+class Fixture(Base):
     __tablename__ = "fixtures"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)

@@ -4,6 +4,8 @@ from functools import wraps
 
 from discord.ext import commands
 from discord.ext.commands import Context
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from bot import bot
 from config import ADMIN
@@ -34,8 +36,11 @@ def ensure_user_exists():
         @wraps(func)
         async def wrapper(self, ctx: commands.Context, *args, **kwargs):
             user_id = ctx.author.id
-            db = ctx.bot.db
-            user = db.query(User).filter_by(discord_id=user_id).first()
+            db: Session = ctx.bot.db
+            user = db.execute(
+                select(User).where(User.discord_id == user_id)
+            ).scalar_one_or_none()
+
             if not user:
                 await ctx.reply("You must first use .join before using this command.")
                 return
