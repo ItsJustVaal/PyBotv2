@@ -1,3 +1,4 @@
+# cogs/fixture_commands.py
 import shlex
 from typing import TYPE_CHECKING
 
@@ -25,7 +26,7 @@ class FixtureCommands(commands.Cog):
         args = shlex.split(ctx.message.content)
         gameweek = int(args[1])
         fixtures = args[2:]
-
+        print(fixtures)
         current = (
             db.execute(select(Fixture).where(Fixture.gameweek == gameweek))
             .scalars()
@@ -43,16 +44,16 @@ class FixtureCommands(commands.Cog):
         )
         embed_display = []
 
-        for i, item in enumerate(fixtures[2:]):
+        for i, item in enumerate(fixtures):
             home, away = item.split("-")
 
             new_fixture = Fixture(
                 order_index=i,
                 gameweek=gameweek,
-                home=home.strip(),
-                away=away.strip(),
+                home=home.strip().lower(),
+                away=away.strip().lower(),
             )
-
+            print(new_fixture)
             db.add(new_fixture)
             embed_display.append(f" {home} vs {away}")
 
@@ -81,16 +82,16 @@ class FixtureCommands(commands.Cog):
         fixture_to_update = db.execute(
             select(Fixture).where(
                 (Fixture.gameweek == gameweek)
-                & (Fixture.home == home)
-                & (Fixture.away == away)
+                & (Fixture.home == home.lower())
+                & (Fixture.away == away.lower())
             )
         ).scalar_one_or_none()
         if fixture_to_update is None:
             await ctx.reply("Fixture does not exist", ephemeral=True)
             return
 
-        fixture_to_update.home = new_home
-        fixture_to_update.away = new_away
+        fixture_to_update.home = new_home.lower()
+        fixture_to_update.away = new_away.lower()
 
         db.commit()
 
@@ -112,7 +113,10 @@ class FixtureCommands(commands.Cog):
 
         db.add(
             Fixture(
-                order_index=current_idx + 1, gameweek=gameweek, home=home, away=away
+                order_index=current_idx + 1,
+                gameweek=gameweek,
+                home=home.lower(),
+                away=away.lower(),
             )
         )
         db.commit()
@@ -127,12 +131,11 @@ class FixtureCommands(commands.Cog):
         db: Session = ctx.bot.db
 
         home, away = fixture_str.strip('"').split("-")
-
         fixture_to_delete = db.execute(
             select(Fixture).where(
                 (Fixture.gameweek == gameweek)
-                & (Fixture.home == home)
-                & (Fixture.away == away)
+                & (Fixture.home == home.lower())
+                & (Fixture.away == away.lower())
             )
         ).scalar_one_or_none()
 
@@ -174,7 +177,7 @@ class FixtureCommands(commands.Cog):
                 select(func.max(Fixture.gameweek))
             ).scalar_one_or_none()
 
-            if current_gameweek is None or current_gameweek == 0:
+            if current_gameweek is None or current_gameweek <= 0:
                 await ctx.reply("Gameweek is 0, predicting has not started yet.")
                 return
         else:
@@ -208,7 +211,7 @@ class FixtureCommands(commands.Cog):
 
         embed_desc = []
         for fixture in fixture_list:
-            embed_desc.append(f" {fixture.home} vs {fixture.away}")
+            embed_desc.append(f" {fixture.home.title()} vs {fixture.away.title()}")
 
         embed.description = "\n".join(embed_desc)
         await ctx.reply(embed=embed)
