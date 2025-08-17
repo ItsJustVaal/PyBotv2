@@ -165,7 +165,10 @@ class FixtureCommands(commands.Cog):
 
         await ctx.reply(f"Deleted fixture and reordered gameweek {gameweek}.")
 
-    @commands.command(name="fixtures")
+    @commands.command(
+        name="fixtures",
+        help="Show fixtures, can pass in gameweek: `.fixtures 2` to see old fixtures",
+    )
     @ensure_user_exists()
     async def get_fixtures(
         self, ctx: commands.Context, current_gameweek: int | None = None

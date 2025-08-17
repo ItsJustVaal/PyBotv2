@@ -17,10 +17,15 @@ class PredictionCommands(commands.Cog):
         self.bot = bot
 
     @commands.command(
-        name="predict", help="Predict for the gameweek: .predict GW 10-2 2-0 2-4 1-0"
+        name="predict",
+        help="Predict for the gameweek: `.predict 10-2 2-0 2-4 1-0`, will update None-None preds in order",
     )
     @ensure_user_exists()
     async def predict(self, ctx: commands.Context, *scores: str) -> None:
+        if self.bot.locked:
+            await ctx.reply("Locked lol noob")
+            return
+
         db: Session = ctx.bot.db
         user_id = str(ctx.author.id)
 
@@ -31,12 +36,17 @@ class PredictionCommands(commands.Cog):
         current_fixtures = (
             db.execute(
                 select(Fixture)
-                .where(Fixture.gameweek == current_gameweek)
+                .where(Fixture.gameweek == current_gameweek, Fixture.tallied == 0)
                 .order_by(Fixture.order_index.asc())
             )
             .scalars()
             .all()
         )
+        if len(current_fixtures) == 0:
+            await ctx.reply(
+                "You have no missing predictions, Use .updatePred to change a single prediction"
+            )
+            return
 
         if len(scores) != len(current_fixtures):
             await ctx.reply(
@@ -44,18 +54,20 @@ class PredictionCommands(commands.Cog):
             )
             return
 
-        for i, score in enumerate(scores):
+        for fixture, score in zip(current_fixtures, scores):
             try:
                 home, away = map(int, score.split("-"))
             except ValueError:
                 await ctx.reply(f"Invalid format: `{score}`. Use format like `2-1`.")
                 return
 
+            match_index = fixture.order_index
+
             pred_exists = db.execute(
                 select(Prediction).where(
                     Prediction.discord_id == user_id,
                     Prediction.gameweek_id == current_gameweek,
-                    Prediction.match_index == i,
+                    Prediction.match_index == match_index,
                 )
             ).scalar_one_or_none()
 
@@ -67,7 +79,7 @@ class PredictionCommands(commands.Cog):
                     Prediction(
                         discord_id=user_id,
                         gameweek_id=current_gameweek,
-                        match_index=i,
+                        match_index=match_index,
                         prediction_home=home,
                         prediction_away=away,
                     )
@@ -86,6 +98,10 @@ class PredictionCommands(commands.Cog):
     )
     @ensure_user_exists()
     async def update_prediction(self, ctx: commands.Context, *update: str) -> None:
+        if self.bot.locked:
+            await ctx.reply("Locked lol noob")
+            return
+
         db: Session = ctx.bot.db
         user_id = str(ctx.author.id)
 
@@ -117,6 +133,11 @@ class PredictionCommands(commands.Cog):
         if not current_fixture:
             await ctx.reply(
                 f"No match found for `{home.title()} vs {away.title()}` in Gameweek {current_gameweek}"
+            )
+            return
+        elif current_fixture.tallied == 1:
+            await ctx.reply(
+                f"Sorry, `{home.title()} vs {away.title()}` in Gameweek {current_gameweek} has been tallied already"
             )
             return
 

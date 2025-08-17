@@ -39,7 +39,7 @@ class UserCommands(commands.Cog):
 
         new_user = User(
             discord_id=user_id,
-            nickname=ctx.author.display_name,
+            nickname=ctx.author.display_name.lower(),
         )
         db.add(new_user)
         db.commit()
@@ -82,7 +82,8 @@ class UserCommands(commands.Cog):
         await ctx.reply(embed=embed)
 
     @commands.command(
-        name="mypred", help="Shows users predictions for current or selected gameweek"
+        name="mypred",
+        help="Shows users predictions for current or selected gameweek, `.mypred` or `.mypred 2` etc",
     )
     @ensure_user_exists()
     async def my_pred(self, ctx: commands.Context, gameweek: int | None = None) -> None:
@@ -136,14 +137,16 @@ class UserCommands(commands.Cog):
 
         for i in range(len(gameweek_fixtures)):
             fixture = gameweek_fixtures[i]
-            if gameweek_predictions == []:
+
+            if i >= len(gameweek_predictions):
+                # no prediction for this fixture
                 embed_desc.append(
-                    f"**{fixture.home.title()}** vs **{fixture.away.title()}** — Predicted: `{None}-{None}`"
+                    f"**{fixture.home.title()}** vs **{fixture.away.title()}** – Predicted: `{None}-{None}`"
                 )
             else:
                 prediction = gameweek_predictions[i]
                 embed_desc.append(
-                    f"**{fixture.home.title()}** vs **{fixture.away.title()}** — Predicted: `{prediction.prediction_home}-{prediction.prediction_away}`"
+                    f"**{fixture.home.title()}** vs **{fixture.away.title()}** – Predicted: `{prediction.prediction_home}-{prediction.prediction_away}`"
                 )
 
         embed.description = "\n".join(embed_desc)

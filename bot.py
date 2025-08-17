@@ -16,7 +16,11 @@ intents.members = True
 
 class PyBot(commands.Bot):
     def __init__(self):
-        super().__init__(command_prefix=".", intents=intents)
+        super().__init__(
+            command_prefix=".",
+            intents=intents,
+            help_command=commands.DefaultHelpCommand(show_parameter_descriptions=False),
+        )
         self._db = None  # type: ignore
         self.locked = False
         self.add_check(self.global_channel_check)
@@ -78,7 +82,7 @@ class PyBot(commands.Bot):
         if isinstance(error, commands.CheckFailure):
             await ctx.reply("Nice try loser")
         else:
-            await ctx.reply("An error occurred.")
+            await ctx.reply("That ain't a command noob.")
 
 
 # Instantiate a bot

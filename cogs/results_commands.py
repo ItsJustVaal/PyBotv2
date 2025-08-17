@@ -30,7 +30,7 @@ class ResultsCommands(commands.Cog):
         current_fixtures = (
             db.execute(
                 select(Fixture)
-                .where(Fixture.gameweek == current_gameweek)
+                .where(Fixture.gameweek == current_gameweek, Fixture.tallied == 0)
                 .order_by(Fixture.order_index.asc())
             )
             .scalars()
@@ -84,7 +84,8 @@ class ResultsCommands(commands.Cog):
             return
 
     @commands.command(
-        name="results", help="Shows results for current or specified gameweek"
+        name="results",
+        help="Shows results for current or specified gameweek if passed in `.results` or `.results 2` etc.",
     )
     @ensure_user_exists()
     async def results(self, ctx: commands.Context, gameweek: int | None = None) -> None:
