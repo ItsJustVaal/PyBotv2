@@ -34,8 +34,6 @@ class FunCommands(commands.Cog):
         fish_user = db.execute(
             select(Fish).where(Fish.discord_id == discord_id)
         ).scalar_one_or_none()
-        if user is None:
-            return
 
         if fish_user is None:
             fish_user = Fish(discord_id=str(message.author.id))
@@ -56,6 +54,9 @@ class FunCommands(commands.Cog):
                 return 4
 
         if message.content.startswith("<:taco:1116778997129412659>"):
+            if user is None:
+                await message.reply(".join if you want to keep track of ur fish")
+                return
             fish = roll_fish()
             match fish:
                 case 0:
@@ -138,7 +139,7 @@ class FunCommands(commands.Cog):
             "Get out.",
             "What a waste of a question smh. No.",
         ]
-        num = random.randint(0, len(choices))
+        num = random.randint(0, len(choices) - 1)
         choice = choices[num]
 
         await ctx.reply(choice)

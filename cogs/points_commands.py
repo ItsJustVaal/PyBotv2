@@ -89,7 +89,7 @@ class PointsCommands(commands.Cog):
         print(args)
 
         user = db.execute(
-            select(User).where(User.nickname == username.lower())
+            select(User).where(User.discord_id == username)
         ).scalar_one_or_none()
         if user is None:
             await ctx.reply("User not found")
@@ -100,7 +100,7 @@ class PointsCommands(commands.Cog):
 
         db.commit()
 
-        await ctx.reply(f"Removed {points} from {username}")
+        await ctx.reply(f"Removed {points} from {user.nickname}")
 
     @commands.command(name="addPoints", hidden=True)
     @is_admin()
@@ -110,7 +110,7 @@ class PointsCommands(commands.Cog):
         points = args[1]
 
         user = db.execute(
-            select(User).where(User.nickname == username.lower())
+            select(User).where(User.discord_id == username)
         ).scalar_one_or_none()
         if user is None:
             await ctx.reply("User not found")
@@ -121,20 +121,22 @@ class PointsCommands(commands.Cog):
 
         db.commit()
 
-        await ctx.reply(f"Added {points} to {username}")
+        await ctx.reply(f"Added {points} to {user.nickname}")
 
     @commands.command(name="standings", help="See current standings")
     async def standings(self, ctx: commands.Context):
         db: Session = ctx.bot.db
 
         all_users_gameweek = (
-            db.execute(select(User).order_by(User.gameweek_points.asc()))
+            db.execute(select(User).order_by(User.gameweek_points.desc()))
             .scalars()
             .all()
         )
 
         all_users_overall = (
-            db.execute(select(User).order_by(User.overall_points.asc())).scalars().all()
+            db.execute(select(User).order_by(User.overall_points.desc()))
+            .scalars()
+            .all()
         )
 
         embed_desc_gameweek = []

@@ -39,6 +39,12 @@
 - `.points`: View top users by total points.
 - `.gameweekPoints`: View current week scores.
 
+🎮 **Fun Commands** (`fun_commands.py`)
+
+- `.8ball`: Ask the magic 8-ball a question.
+- `.fish`: Catch fish using 🎣 — compete with other users!
+- `.scrabble`: Play scrabble-style minigames for bragging rights.
+
 ---
 
 ## 🛠️ Developer Notes
@@ -56,57 +62,21 @@
 - **Fixtures**: Gameweek, Home, Away, Order Index, Scores
 - **Predictions**: By user/gameweek/team
 - **Results**: Fixture scores, updated dynamically
+- **Fish**: Users table of fish
 
 ### Decorators
 
 - `@ensure_user_exists`: Checks DB registration.
 - `@is_admin`: Limits access by Discord ID.
-- `@is_locked`: Prevents usage during lock state.
 
 ---
 
-## 🚧 Coming Soon
+## 🚧 TODO
 
-🎮 **Fun Commands** (`fun_commands.py`)
-
-- `.8ball`: Ask the magic 8-ball a question.
-- `.fish`: Catch fish using 🎣 — compete with other users!
-- `.scrabble`: Play scrabble-style minigames for bragging rights.
-
-⚽ **FUT Commands** (`fut_commands.py`)
-
-- FUT-style fantasy functionality inspired by FIFA Ultimate Team.
-- Squad management, upgrades, and transfers (planned).
-
-📈 **Points System** (`points_commands.py`)
-
-- Track gameweek points and total fantasy points.
-- Gain or lose points from predictions, results, and events.
-
-🔮 **Prediction Commands** (`pred_commands.py`)
-
-- Submit match predictions with `.predict`.
-- Lock predictions before the gameweek starts.
-- View personal and global predictions.
-
-📊 **Results Entry** (`results_commands.py`)
-
-- Admin-only tools for submitting and updating match results.
-- Auto-calculate points after results are posted.
-
----
-
-## 📦 Setup
-
-1. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-2. Set your token and admin ID in `config.py`
-3. Run the bot:
-   ```bash
-   python bot.py
-   ```
+Scrabble
+Set User Points to specific number
+Set all users to 0 points (helper command at season restart)
+Backup db
 
 ---
 
