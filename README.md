@@ -4,49 +4,6 @@
 
 ---
 
-## Features
-
-### ✅ User Management
-
-- `.join`: Register yourself in the game.
-- `.me`: View your user card and stats.
-
-### 📆 Fixtures
-
-- `.setFixtures <gameweek> <"TeamA-TeamB" ...>`: Admin-only. Set fixtures for a specific gameweek.
-- `.updateFixture <gameweek> <"OldHome-OldAway"> <"NewHome-NewAway">`: Admin-only. Update a fixture.
-- `.addFixture <gameweek> <"TeamA-TeamB">`: Admin-only. Add a fixture.
-- `.deleteFixture <gameweek> <"TeamA-TeamB">`: Admin-only. Delete a fixture and reorder indices.
-- `.fixtures [gameweek]`: View fixtures for the current or given gameweek.
-
-### 🔮 Predictions
-
-- `.predict <gameweek> <score1-score2 ...>`: Submit predictions for each fixture.
-- `.updatePrediction <gameweek> <"TeamA-TeamB"> <score>`: Update prediction.
-- `.deletePrediction <gameweek> <"TeamA-TeamB">`: Delete a prediction.
-- `.myPredictions [gameweek]`: View personal predictions.
-- `.userPredictions <user>`: Admin-only. View another user's predictions.
-
-### 📊 Results
-
-- `.setResults <gameweek> <score1-score2 ...>`: Admin-only. Enter actual match results.
-- `.updateResult <gameweek> <"TeamA-TeamB"> <score>`: Admin-only. Update a result.
-- `.deleteResult <gameweek> <"TeamA-TeamB">`: Admin-only. Delete a result.
-
-### 🏆 Points
-
-- Auto-calculated when results are added.
-- `.points`: View top users by total points.
-- `.gameweekPoints`: View current week scores.
-
-🎮 **Fun Commands** (`fun_commands.py`)
-
-- `.8ball`: Ask the magic 8-ball a question.
-- `.fish`: Catch fish using 🎣 — compete with other users!
-- `.scrabble`: Play scrabble-style minigames for bragging rights.
-
----
-
 ## 🛠️ Developer Notes
 
 ### Architecture
@@ -77,6 +34,10 @@ Scrabble
 Set User Points to specific number
 Set all users to 0 points (helper command at season restart)
 Backup db
+pred top 4
+Titles system - title for gameweek winner - title for first mythical fish - title for top4 winner
+Rate limit fish command to prevent discord rate limits
+DRY up some of the common DB calls
 
 ---
 

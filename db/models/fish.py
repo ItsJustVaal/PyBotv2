@@ -17,6 +17,7 @@ class Fish(Base):
     uncommon: Mapped[int] = mapped_column(Integer, default=0)
     rare: Mapped[int] = mapped_column(Integer, default=0)
     legendary: Mapped[int] = mapped_column(Integer, default=0)
+    mythical: Mapped[int] = mapped_column(Integer, default=0)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

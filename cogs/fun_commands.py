@@ -30,6 +30,9 @@ class FunCommands(commands.Cog):
         user = db.execute(
             select(User).where(User.discord_id == discord_id)
         ).scalar_one_or_none()
+        if user is None:
+            await message.reply(".join if you want to keep track of ur fish")
+            return
 
         fish_user = db.execute(
             select(Fish).where(Fish.discord_id == discord_id)
@@ -41,22 +44,21 @@ class FunCommands(commands.Cog):
             db.commit()
 
         def roll_fish():
-            roll = random.random()
-            if roll < 0.5:
-                return 0
-            elif roll < 0.7:
-                return 1
-            elif roll < 0.9:
-                return 2
-            elif roll < 0.98:
-                return 3
+            r = random.random()  # [0.0, 1.0)
+            if r < 0.40:
+                return 0  # 40.00%
+            elif r < 0.85:
+                return 1  # +45.00% = 85.00
+            elif r < 0.97:
+                return 2  # +12.00% = 97.00
+            elif r < 0.9899:
+                return 3  # +1.99%  = 98.99
+            elif r < 0.9999:
+                return 4  # +1.00%  = 99.99
             else:
-                return 4
+                return 5
 
         if message.content.startswith("<:taco:1116778997129412659>"):
-            if user is None:
-                await message.reply(".join if you want to keep track of ur fish")
-                return
             fish = roll_fish()
             match fish:
                 case 0:
@@ -74,8 +76,12 @@ class FunCommands(commands.Cog):
                 case 4:
                     fish_user.legendary += 1
                     await message.reply("Legendary Fish 🐉")
+                case 5:
+                    fish_user.mythical += 1
+                    await message.reply("YOU CAUGHT A MYTHICAL FISH! 🦑")
         else:
             return
+        db.commit()
 
     @commands.command(name="myfish", help="Shows all of your fish")
     @ensure_user_exists()
@@ -91,6 +97,7 @@ class FunCommands(commands.Cog):
             return
 
         counts = {
+            "Mythical": fish.mythical,
             "Legendary": fish.legendary,
             "Rare": fish.rare,
             "Uncommon": fish.uncommon,
@@ -105,6 +112,7 @@ class FunCommands(commands.Cog):
         embed_desc.append(f"Uncommon 🐠:  `{str(counts['Uncommon'])}`")
         embed_desc.append(f"Rare 🐟:  `{str(counts['Rare'])}`")
         embed_desc.append(f"Legendary 🐉:  `{str(counts['Legendary'])}`")
+        embed_desc.append(f"Mythical 🦑:  `{str(counts['Mythical'])}`")
 
         embed = discord.Embed(
             title=f"{ctx.author.display_name}'s Fishing Log",
