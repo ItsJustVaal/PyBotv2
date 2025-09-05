@@ -30,23 +30,28 @@ class ResultsCommands(commands.Cog):
         current_fixtures = (
             db.execute(
                 select(Fixture)
-                .where(Fixture.gameweek == current_gameweek, Fixture.tallied == 0)
+                .where(
+                    Fixture.gameweek == current_gameweek,
+                    Fixture.tallied == 0,
+                    Fixture.result_added == 0,
+                )
                 .order_by(Fixture.order_index.asc())
             )
             .scalars()
             .all()
         )
 
-        if len(results) != len(current_fixtures):
-            await ctx.reply(
-                f"Wrong number of resutls added, need {len(current_fixtures)} got {len(results)}"
-            )
-            return
+        # if len(results) != len(current_fixtures):
+        #     await ctx.reply(
+        #         f"Wrong number of resutls added, need {len(current_fixtures)} got {len(results)}"
+        #     )
+        #     return
 
         for i, result in enumerate(results):
             home_score, away_score = result.split("-")
             current_fixtures[i].home_score = int(home_score)
             current_fixtures[i].away_score = int(away_score)
+            current_fixtures[i].result_added = 1
 
         db.commit()
         await ctx.invoke(self.bot.get_command("results"), gameweek=current_gameweek)  # type: ignore
@@ -64,7 +69,7 @@ class ResultsCommands(commands.Cog):
             home, away = update[0].strip().lower().split("-")
             home_score, away_score = map(int, update[1].split("-"))
         except Exception:
-            await ctx.reply('Invalid format. Use: `.updatePred "Home-Away" 2-1`')
+            await ctx.reply('Invalid format. Use: `.updateResult "Home-Away" 2-1`')
             return
 
         fixture = db.execute(
@@ -79,6 +84,8 @@ class ResultsCommands(commands.Cog):
             fixture.home_score = home_score
             fixture.away_score = away_score
             fixture.tallied = 1
+
+            db.commit()
             await ctx.invoke(self.bot.get_command("results"), gameweek=current_gameweek)  # type: ignore
         else:
             await ctx.reply("Fixture not found")
@@ -124,10 +131,13 @@ class ResultsCommands(commands.Cog):
         )
 
         embed_desc = []
-
         for i in range(len(fixtures)):
+            if fixtures[i].tallied:
+                res = "Yes"
+            else:
+                res = "No"
             embed_desc.append(
-                f"**{fixtures[i].home.title()}** vs **{fixtures[i].away.title()}** — Score: `{fixtures[i].home_score}-{fixtures[i].away_score}`"
+                f"**{fixtures[i].home.title()}** vs **{fixtures[i].away.title()}** — Score: `{fixtures[i].home_score}-{fixtures[i].away_score}` - Points Given: {res}"
             )
 
         embed.description = "\n".join(embed_desc)

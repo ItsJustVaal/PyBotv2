@@ -20,6 +20,7 @@ class Fixture(Base):
     away_score: Mapped[int] = mapped_column(Integer, default=0)
 
     tallied: Mapped[int] = mapped_column(Integer, default=0)
+    result_added: Mapped[int] = mapped_column(Integer, default=0)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

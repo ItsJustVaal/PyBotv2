@@ -18,7 +18,6 @@ class User(Base):
     overall_points: Mapped[int] = mapped_column(Integer, default=0)
     free_packs: Mapped[int] = mapped_column(Integer, default=0)
     scrabble_wins: Mapped[int] = mapped_column(Integer, default=0)
-    fish_caught: Mapped[int] = mapped_column(Integer, default=0)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

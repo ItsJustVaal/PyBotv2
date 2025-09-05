@@ -1,8 +1,8 @@
 import random
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 import discord
-from discord import Message
 from discord.ext import commands
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -18,15 +18,27 @@ if TYPE_CHECKING:
 class FunCommands(commands.Cog):
     def __init__(self, bot: "PyBot"):
         self.bot = bot
+        self.fishing_uses = {}
 
     @commands.Cog.listener(name="on_message")
     @ensure_user_exists()
-    async def fishing(self, message: Message):
+    async def fishing(self, message: discord.Message):
         db: Session = self.bot.db
         if message.author.bot:
             return
         discord_id = str(message.author.id)
 
+        today = datetime.now().date().strftime("%Y-%m-%d")
+        uses, last_date = self.fishing_uses.get(discord_id, (5, today))
+        if last_date != today:
+            uses = 5
+            last_date = today
+
+        if uses == 0:
+            return
+
+        self.fishing_uses[discord_id] = (uses - 1, today)
+        print(self.fishing_uses)
         user = db.execute(
             select(User).where(User.discord_id == discord_id)
         ).scalar_one_or_none()
@@ -88,6 +100,7 @@ class FunCommands(commands.Cog):
     async def my_fish(self, ctx: commands.Context):
         db: Session = ctx.bot.db
         user_id = str(ctx.author.id)
+        uses, today = self.fishing_uses.get(user_id, (5, 0))  # type: ignore
 
         fish = db.execute(
             select(Fish).where(Fish.discord_id == user_id)
@@ -119,7 +132,9 @@ class FunCommands(commands.Cog):
             color=discord.Color.blue(),
         )
         embed.description = "\n".join(embed_desc)
-        embed.set_footer(text=f"Total fish caught: {total_caught}")
+        embed.set_footer(
+            text=f"Total fish caught: {total_caught} - Casts left today: {uses}"
+        )
 
         await ctx.reply(embed=embed)
 

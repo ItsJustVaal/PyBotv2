@@ -43,7 +43,11 @@ class PointsCommands(commands.Cog):
                     Fixture.order_index == Prediction.match_index,
                 ),
             )
-            .where(Fixture.gameweek == current_gameweek, Fixture.tallied == 0)
+            .where(
+                Fixture.gameweek == current_gameweek,
+                Fixture.tallied == 0,
+                Fixture.result_added == 1,
+            )
         ).all()
 
         users_by_id = {
@@ -158,6 +162,18 @@ class PointsCommands(commands.Cog):
         embed.add_field(name="Overall", value="\n".join(embed_desc_overall))
 
         await ctx.reply(embed=embed)
+
+    @commands.command(name="reset", hidden=True)
+    async def reset(self, ctx: commands.Context):
+        db: Session = ctx.bot.db
+
+        all_users = db.execute(select(User)).scalars().all()
+
+        for user in all_users:
+            user.gameweek_points = 0
+
+        db.commit()
+        await ctx.reply("Gameweek Points Reset")
 
 
 async def setup(bot: "PyBot"):
