@@ -1,6 +1,8 @@
+import asyncio
 import random
 from datetime import datetime
 from typing import TYPE_CHECKING
+from zoneinfo import ZoneInfo
 
 import discord
 from discord.ext import commands
@@ -13,32 +15,31 @@ from decorators.helpers import ensure_user_exists
 
 if TYPE_CHECKING:
     from bot import PyBot
+DAILY_CASTS = 5
 
 
 class FunCommands(commands.Cog):
     def __init__(self, bot: "PyBot"):
         self.bot = bot
-        self.fishing_uses = {}
+        self.fishing_uses: dict[str, tuple[int, str]] = {}
+        self._lock = asyncio.Lock()
 
-    @commands.Cog.listener(name="on_message")
-    @ensure_user_exists()
+    def _today_key(self) -> str:
+        return datetime.now(ZoneInfo("America/Los_Angeles")).date().isoformat()
+
+    @commands.Cog.listener("on_message")
     async def fishing(self, message: discord.Message):
-        db: Session = self.bot.db
         if message.author.bot:
             return
-        discord_id = str(message.author.id)
 
-        today = datetime.now().date().strftime("%Y-%m-%d")
-        uses, last_date = self.fishing_uses.get(discord_id, (5, today))
-        if last_date != today:
-            uses = 5
-            last_date = today
-
-        if uses == 0:
+        content = message.content.strip()
+        if not content.startswith("<:taco:1116778997129412659>"):
             return
 
-        self.fishing_uses[discord_id] = (uses - 1, today)
-        print(self.fishing_uses)
+        db: Session = self.bot.db
+        discord_id = str(message.author.id)
+        today = self._today_key()
+
         user = db.execute(
             select(User).where(User.discord_id == discord_id)
         ).scalar_one_or_none()
@@ -49,13 +50,26 @@ class FunCommands(commands.Cog):
         fish_user = db.execute(
             select(Fish).where(Fish.discord_id == discord_id)
         ).scalar_one_or_none()
-
         if fish_user is None:
-            fish_user = Fish(discord_id=str(message.author.id))
+            fish_user = Fish(discord_id=discord_id)
             db.add(fish_user)
-            db.commit()
 
-        def roll_fish():
+        async with self._lock:
+            uses_left, last_date = self.fishing_uses.get(
+                discord_id, (DAILY_CASTS, today)
+            )
+            if last_date != today:
+                uses_left = DAILY_CASTS
+                last_date = today
+
+            if uses_left <= 0:
+                self.fishing_uses[discord_id] = (0, today)
+                return
+
+            new_uses = uses_left - 1
+            self.fishing_uses[discord_id] = (new_uses, today)
+
+        def roll_fish() -> int:
             r = random.random()  # [0.0, 1.0)
             if r < 0.40:
                 return 0  # 40.00%
@@ -68,46 +82,52 @@ class FunCommands(commands.Cog):
             elif r < 0.9999:
                 return 4  # +1.00%  = 99.99
             else:
-                return 5
+                return 5  # 0.01%
 
-        if message.content.startswith("<:taco:1116778997129412659>"):
-            fish = roll_fish()
-            match fish:
-                case 0:
-                    fish_user.no_fish += 1
-                    await message.reply("Nothing lol loser")
-                case 1:
-                    fish_user.common += 1
-                    await message.reply("Common Fish 🎣")
-                case 2:
-                    fish_user.uncommon += 1
-                    await message.reply("Uncommon Fish 🐠")
-                case 3:
-                    fish_user.rare += 1
-                    await message.reply("Rare Fish 🐟")
-                case 4:
-                    fish_user.legendary += 1
-                    await message.reply("Legendary Fish 🐉")
-                case 5:
-                    fish_user.mythical += 1
-                    await message.reply("YOU CAUGHT A MYTHICAL FISH! 🦑")
+        fish = roll_fish()
+        if fish == 0:
+            fish_user.no_fish += 1
+            text = "Nothing lol loser"
+        elif fish == 1:
+            fish_user.common += 1
+            text = "Common Fish 🎣"
+        elif fish == 2:
+            fish_user.uncommon += 1
+            text = "Uncommon Fish 🐠"
+        elif fish == 3:
+            fish_user.rare += 1
+            text = "Rare Fish 🐟"
+        elif fish == 4:
+            fish_user.legendary += 1
+            text = "Legendary Fish 🐉"
         else:
-            return
+            fish_user.mythical += 1
+            text = "YOU CAUGHT A MYTHICAL FISH! 🦑"
+
         db.commit()
+        await message.reply(f"{text} — casts left today: {new_uses}/{DAILY_CASTS}")
+        
 
     @commands.command(name="myfish", help="Shows all of your fish")
     @ensure_user_exists()
     async def my_fish(self, ctx: commands.Context):
         db: Session = ctx.bot.db
-        user_id = str(ctx.author.id)
-        uses, today = self.fishing_uses.get(user_id, (5, 0))  # type: ignore
+        discord_id = str(ctx.author.id)
+        today = self._today_key()
 
         fish = db.execute(
-            select(Fish).where(Fish.discord_id == user_id)
+            select(Fish).where(Fish.discord_id == discord_id)
         ).scalar_one_or_none()
         if fish is None:
             await ctx.reply("User not found")
             return
+
+        async with self._lock:
+            uses_left, last_date = self.fishing_uses.get(discord_id, (DAILY_CASTS, today))
+            if last_date != today:
+                uses_left = DAILY_CASTS
+                last_date = today
+                self.fishing_uses[discord_id] = (uses_left, last_date)
 
         counts = {
             "Mythical": fish.mythical,
@@ -117,23 +137,26 @@ class FunCommands(commands.Cog):
             "Common": fish.common,
             "Nothing": fish.no_fish,
         }
-        total_caught = fish.common + fish.uncommon + fish.rare + fish.legendary
+        total_caught = (
+            fish.common + fish.uncommon + fish.rare + fish.legendary + fish.mythical
+        )
 
-        embed_desc = []
-        embed_desc.append(f"Nothing 💨:  `{str(counts['Nothing'])}`")
-        embed_desc.append(f"Common 🎣:  `{str(counts['Common'])}`")
-        embed_desc.append(f"Uncommon 🐠:  `{str(counts['Uncommon'])}`")
-        embed_desc.append(f"Rare 🐟:  `{str(counts['Rare'])}`")
-        embed_desc.append(f"Legendary 🐉:  `{str(counts['Legendary'])}`")
-        embed_desc.append(f"Mythical 🦑:  `{str(counts['Mythical'])}`")
+        embed_desc = [
+            f"Nothing 💨:  `{counts['Nothing']}`",
+            f"Common 🎣:  `{counts['Common']}`",
+            f"Uncommon 🐠:  `{counts['Uncommon']}`",
+            f"Rare 🐟:  `{counts['Rare']}`",
+            f"Legendary 🐉:  `{counts['Legendary']}`",
+            f"Mythical 🦑:  `{counts['Mythical']}`",
+        ]
 
         embed = discord.Embed(
             title=f"{ctx.author.display_name}'s Fishing Log",
             color=discord.Color.blue(),
+            description="\n".join(embed_desc),
         )
-        embed.description = "\n".join(embed_desc)
         embed.set_footer(
-            text=f"Total fish caught: {total_caught} - Casts left today: {uses}"
+            text=f"Total fish caught: {total_caught} — Casts left today: {uses_left}/{DAILY_CASTS}"
         )
 
         await ctx.reply(embed=embed)

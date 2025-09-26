@@ -164,6 +164,7 @@ class PointsCommands(commands.Cog):
         await ctx.reply(embed=embed)
 
     @commands.command(name="reset", hidden=True)
+    @is_admin()
     async def reset(self, ctx: commands.Context):
         db: Session = ctx.bot.db
 

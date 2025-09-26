@@ -36,7 +36,7 @@ class PredictionCommands(commands.Cog):
         current_fixtures = (
             db.execute(
                 select(Fixture)
-                .where(Fixture.gameweek == current_gameweek, Fixture.tallied == 0)
+                .where(and_(Fixture.gameweek == current_gameweek, Fixture.tallied == 0, Fixture.result_added == 0))
                 .order_by(Fixture.order_index.asc())
             )
             .scalars()

@@ -133,21 +133,21 @@ class UserCommands(commands.Cog):
             .all()
         )
 
+        pred_by_index = {p.match_index: p for p in gameweek_predictions}
+
         embed_desc = []
-
-        for i in range(len(gameweek_fixtures)):
-            fixture = gameweek_fixtures[i]
-
-            if i >= len(gameweek_predictions):
-                # no prediction for this fixture
+        
+        for fixture in gameweek_fixtures:
+            p = pred_by_index.get(fixture.order_index)
+            if p is None:
                 embed_desc.append(
                     f"**{fixture.home.title()}** vs **{fixture.away.title()}** – Predicted: `{None}-{None}`"
                 )
             else:
-                prediction = gameweek_predictions[i]
                 embed_desc.append(
-                    f"**{fixture.home.title()}** vs **{fixture.away.title()}** – Predicted: `{prediction.prediction_home}-{prediction.prediction_away}`"
+                    f"**{fixture.home.title()}** vs **{fixture.away.title()}** – Predicted: `{p.prediction_home}-{p.prediction_away}`"
                 )
+
 
         embed.description = "\n".join(embed_desc)
         await ctx.reply(embed=embed)
