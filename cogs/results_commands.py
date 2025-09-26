@@ -83,7 +83,7 @@ class ResultsCommands(commands.Cog):
         if fixture:
             fixture.home_score = home_score
             fixture.away_score = away_score
-            fixture.tallied = 1
+            fixture.result_added = 1
 
             db.commit()
             await ctx.invoke(self.bot.get_command("results"), gameweek=current_gameweek)  # type: ignore

@@ -146,15 +146,14 @@ class PointsCommands(commands.Cog):
         embed_desc_gameweek = []
         embed_desc_overall = []
 
-        for user in range(len(all_users_gameweek)):
-            embed_desc_gameweek.append(
-                f"{all_users_gameweek[user].nickname.capitalize()}: {all_users_gameweek[user].gameweek_points}"
-            )
+        embed_desc_gameweek = [
+            f"{u.nickname.capitalize()}: {u.gameweek_points}"
+            for u in all_users_gameweek
+        ]
 
-        for user in range(len(all_users_overall)):
-            embed_desc_overall.append(
-                f"{all_users_gameweek[user].nickname.capitalize()}: {all_users_gameweek[user].overall_points}"
-            )
+        embed_desc_overall = [
+            f"{u.nickname.capitalize()}: {u.overall_points}" for u in all_users_overall
+        ]
 
         embed = discord.Embed(title="Leaderboard")
 
