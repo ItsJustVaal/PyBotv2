@@ -73,12 +73,17 @@ class PyBot(commands.Bot):
         self.logger.info(f"[CMD] {ctx.author} ran '{ctx.command}' in {ctx.channel}")
 
     async def on_command_error(self, ctx: commands.Context, error):
-        if str(ctx.channel.id) not in ALLOWED_CHANNELS:  # type: ignore
+        if hasattr(ctx.command, "on_error"):
+            return
+
+        if str(ctx.channel.id) not in ALLOWED_CHANNELS:
             self.logger.info(
-                f"[IGNORED] {ctx.author} tried to run '{ctx.command}' in disallowed channel {ctx.channel.name}"  # type: ignore
+                f"[IGNORED] {ctx.author} tried to run '{ctx.command}' in disallowed channel {ctx.channel}"
             )
             return
+
         self.logger.error(f"[ERROR] {ctx.command} by {ctx.author}: {error}")
+
         if isinstance(error, commands.CheckFailure):
             await ctx.reply("Nice try loser")
         else:
