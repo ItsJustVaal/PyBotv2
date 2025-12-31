@@ -279,7 +279,16 @@ class FunCommands(commands.Cog):
             url: str, tab_text: str
         ) -> tuple[list[str], list[list[str]]]:
             async with async_playwright() as p:
-                browser = await p.chromium.launch(headless=True)
+                try:
+                    browser = await asyncio.wait_for(
+                        p.chromium.connect("ws://127.0.0.1:3000"),
+                        timeout=5
+                    )
+                    print("Connected to Playwright server!")
+                except Exception as e:
+                    print("Playwright connect failed:", repr(e))
+                    return [], []
+                
                 page = await browser.new_page()
                 await page.goto(url, wait_until="networkidle")
 
