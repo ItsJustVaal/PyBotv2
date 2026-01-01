@@ -281,7 +281,7 @@ class FunCommands(commands.Cog):
             async with async_playwright() as p:
                 try:
                     browser = await asyncio.wait_for(
-                        p.chromium.connect("ws://127.0.0.1:3000"),
+                        p.chromium.launch(headless=True),
                         timeout=5
                     )
                     print("Connected to Playwright server!")

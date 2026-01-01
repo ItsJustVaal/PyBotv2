@@ -1,0 +1,10 @@
+services:
+  pybotv2:
+    build: .
+    container_name: pybotv2
+    restart: unless-stopped
+    ipc: host
+    env_file:
+      - .env
+    volumes:
+      - ./db:/app/db
