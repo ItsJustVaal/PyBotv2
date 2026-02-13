@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo
 import discord
 from bs4 import BeautifulSoup
 from discord.ext import commands
-from playwright.async_api import async_playwright
+# from playwright.async_api import async_playwright
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -255,136 +255,136 @@ class FunCommands(commands.Cog):
 
         await ctx.reply(choice)
 
-    @commands.command(
-        name="opta",
-        help="Get the latest Opta pedictions. Usage: .opta pl / cl / buli etc.",
-    )
-    @commands.cooldown(1, 20, commands.BucketType.user)
-    @commands.cooldown(1, 60, commands.BucketType.default)
-    async def opta(self, ctx: commands.Context, league: str = "pl"):
-        league = league.lower()
-        if league == "help":
-            await ctx.reply("League Codes: pl, cl, buli, lali, l1, sa")
-            return
+#     @commands.command(
+#         name="opta",
+#         help="Get the latest Opta pedictions. Usage: .opta pl / cl / buli etc.",
+#     )
+#     @commands.cooldown(1, 20, commands.BucketType.user)
+#     @commands.cooldown(1, 60, commands.BucketType.default)
+#     async def opta(self, ctx: commands.Context, league: str = "pl"):
+#         league = league.lower()
+#         if league == "help":
+#             await ctx.reply("League Codes: pl, cl, buli, lali, l1, sa")
+#             return
 
-        if league not in LEAGUE_CONFIG:
-            await ctx.reply("Unsupported league. Try .opta help for league list")
-            return
+#         if league not in LEAGUE_CONFIG:
+#             await ctx.reply("Unsupported league. Try .opta help for league list")
+#             return
 
-        await ctx.reply("Loading stand by...", delete_after=5)
+#         await ctx.reply("Loading stand by...", delete_after=5)
 
-        cfg = LEAGUE_CONFIG[league]
+#         cfg = LEAGUE_CONFIG[league]
 
-        async def fetch_predicted_table(
-            url: str, tab_text: str
-        ) -> tuple[list[str], list[list[str]]]:
-            async with async_playwright() as p:
-                try:
-                    browser = await asyncio.wait_for(
-                        p.chromium.launch(headless=True),
-                        timeout=5
-                    )
-                    print("Connected to Playwright server!")
-                except Exception as e:
-                    print("Playwright connect failed:", repr(e))
-                    return [], []
+#         async def fetch_predicted_table(
+#             url: str, tab_text: str
+#         ) -> tuple[list[str], list[list[str]]]:
+#             async with async_playwright() as p:
+#                 try:
+#                     browser = await asyncio.wait_for(
+#                         p.chromium.launch(headless=True),
+#                         timeout=5
+#                     )
+#                     print("Connected to Playwright server!")
+#                 except Exception as e:
+#                     print("Playwright connect failed:", repr(e))
+#                     return [], []
                 
-                page = await browser.new_page()
-                await page.goto(url, wait_until="networkidle")
+#                 page = await browser.new_page()
+#                 await page.goto(url, wait_until="networkidle")
 
-                # Click Predicted tab
-                await page.get_by_text(tab_text, exact=False).click()
-                await page.wait_for_timeout(2000)
+#                 # Click Predicted tab
+#                 await page.get_by_text(tab_text, exact=False).click()
+#                 await page.wait_for_timeout(2000)
 
-                html = await page.content()
-                await browser.close()
+#                 html = await page.content()
+#                 await browser.close()
 
-            soup = BeautifulSoup(html, "html.parser")
-            table = soup.find("table")
-            if not table:
-                return [], []
+#             soup = BeautifulSoup(html, "html.parser")
+#             table = soup.find("table")
+#             if not table:
+#                 return [], []
 
-            # headers
-            thead = table.find("thead")
-            header_cells = thead.find_all("th") if thead else []
-            headers = [h.get_text(strip=True).upper() for h in header_cells]
+#             # headers
+#             thead = table.find("thead")
+#             header_cells = thead.find_all("th") if thead else []
+#             headers = [h.get_text(strip=True).upper() for h in header_cells]
 
-            # rows
-            tbody = table.find("tbody")
-            if not tbody:
-                return headers, []
+#             # rows
+#             tbody = table.find("tbody")
+#             if not tbody:
+#                 return headers, []
 
-            rows: list[list[str]] = []
-            for tr in tbody.find_all("tr"):
-                cells = [td.get_text(strip=True) for td in tr.find_all("td")]
-                if cells:
-                    rows.append(cells)
+#             rows: list[list[str]] = []
+#             for tr in tbody.find_all("tr"):
+#                 cells = [td.get_text(strip=True) for td in tr.find_all("td")]
+#                 if cells:
+#                     rows.append(cells)
 
-            return headers, rows
+#             return headers, rows
 
-        def format_league_table(headers: list[str], rows: list[list[str]]) -> str:
-            source_cols = cfg["source_cols"]
-            out_headers = cfg["out_headers"]
-            align = cfg["align"]
-            num_cols = len(out_headers)
+#         def format_league_table(headers: list[str], rows: list[list[str]]) -> str:
+#             source_cols = cfg["source_cols"]
+#             out_headers = cfg["out_headers"]
+#             align = cfg["align"]
+#             num_cols = len(out_headers)
 
-            # map header name -> index
-            header_index: dict[str, int] = {h: i for i, h in enumerate(headers)}
-            indices: list[int] = []
-            for col in source_cols:
-                try:
-                    indices.append(header_index[col])
-                except KeyError:
-                    raise RuntimeError(f"Column {col!r} not found in headers {headers}")
+#             # map header name -> index
+#             header_index: dict[str, int] = {h: i for i, h in enumerate(headers)}
+#             indices: list[int] = []
+#             for col in source_cols:
+#                 try:
+#                     indices.append(header_index[col])
+#                 except KeyError:
+#                     raise RuntimeError(f"Column {col!r} not found in headers {headers}")
 
-            # trim rows to the configured columns / order
-            trimmed_rows: list[list[str]] = []
-            for r in rows:
-                trimmed_rows.append([r[i] if i < len(r) else "" for i in indices])
+#             # trim rows to the configured columns / order
+#             trimmed_rows: list[list[str]] = []
+#             for r in rows:
+#                 trimmed_rows.append([r[i] if i < len(r) else "" for i in indices])
 
-            # column widths
-            col_widths = [len(h) for h in out_headers]
-            for row in trimmed_rows:
-                for i in range(num_cols):
-                    col_widths[i] = max(col_widths[i], len(row[i]))
+#             # column widths
+#             col_widths = [len(h) for h in out_headers]
+#             for row in trimmed_rows:
+#                 for i in range(num_cols):
+#                     col_widths[i] = max(col_widths[i], len(row[i]))
 
-            def fmt_cell(text: str, width: int, a: str) -> str:
-                return text.rjust(width) if a == "r" else text.ljust(width)
+#             def fmt_cell(text: str, width: int, a: str) -> str:
+#                 return text.rjust(width) if a == "r" else text.ljust(width)
 
-            def fmt_row(cols: list[str]) -> str:
-                padded = []
-                for i in range(num_cols):
-                    val = cols[i] if i < len(cols) else ""
-                    padded.append(fmt_cell(val, col_widths[i], align[i]))
-                return " ".join(padded)
+#             def fmt_row(cols: list[str]) -> str:
+#                 padded = []
+#                 for i in range(num_cols):
+#                     val = cols[i] if i < len(cols) else ""
+#                     padded.append(fmt_cell(val, col_widths[i], align[i]))
+#                 return " ".join(padded)
 
-            lines: list[str] = []
-            lines.append(fmt_row(out_headers))  # header
-            lines.append(" ".join("-" * w for w in col_widths))  # separator
-            for r in trimmed_rows:
-                lines.append(fmt_row(r))  # data rows
+#             lines: list[str] = []
+#             lines.append(fmt_row(out_headers))  # header
+#             lines.append(" ".join("-" * w for w in col_widths))  # separator
+#             for r in trimmed_rows:
+#                 lines.append(fmt_row(r))  # data rows
 
-            table_str = "\n".join(lines)
-            return f"```text\n{table_str}\n```"
+#             table_str = "\n".join(lines)
+#             return f"```text\n{table_str}\n```"
 
-        # === actual command flow ===
-        async with self.opta_lock:
-            headers, rows = await fetch_predicted_table(cfg["url"], cfg["tab_text"])
-            if not rows:
-                await ctx.send("Could not fetch Opta data right now.")
-                return
+#         # === actual command flow ===
+#         async with self.opta_lock:
+#             headers, rows = await fetch_predicted_table(cfg["url"], cfg["tab_text"])
+#             if not rows:
+#                 await ctx.send("Could not fetch Opta data right now.")
+#                 return
 
-            table_str = format_league_table(headers, rows)
-            title = f"**{cfg['title']}**\n"
-            await ctx.send(title + table_str)
+#             table_str = format_league_table(headers, rows)
+#             title = f"**{cfg['title']}**\n"
+#             await ctx.send(title + table_str)
 
-    @opta.error
-    async def opta_error(self, ctx, error):
-        if isinstance(error, commands.CommandOnCooldown):
-            await ctx.reply(
-                f"Try again in **{error.retry_after:.1f}s**.",
-                delete_after=5,
-            )
+#     @opta.error
+#     async def opta_error(self, ctx, error):
+#         if isinstance(error, commands.CommandOnCooldown):
+#             await ctx.reply(
+#                 f"Try again in **{error.retry_after:.1f}s**.",
+#                 delete_after=5,
+#             )
 
 
 async def setup(bot: "PyBot"):
