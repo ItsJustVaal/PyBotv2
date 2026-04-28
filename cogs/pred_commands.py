@@ -1,12 +1,14 @@
 from typing import TYPE_CHECKING
 
+import discord
 from discord.ext import commands
 from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
 from db.models.fixtures import Fixture
 from db.models.predictions import Prediction
-from decorators.helpers import ensure_user_exists
+from db.models.users import User
+from decorators.helpers import ensure_user_exists, is_admin
 
 if TYPE_CHECKING:
     from bot import PyBot
@@ -171,6 +173,84 @@ class PredictionCommands(commands.Cog):
             )
 
         db.commit()
+
+    @commands.command(name="viewPred", hidden=True)
+    @is_admin()
+    async def view_pred(self, ctx: commands.Context, discord_id: str | None = None, gameweek: int | None = None) -> None:
+        if discord_id is None:
+            await ctx.reply("You must provide a Discord ID. Usage: `.viewPred <discord_id> <gameweek>`")
+            return
+        if gameweek is None:
+            await ctx.reply("You must provide a gameweek. Usage: `.viewPred <discord_id> <gameweek>`")
+            return
+
+        db: Session = ctx.bot.db
+
+        user = db.execute(
+            select(User).where(User.discord_id == discord_id)
+        ).scalar_one_or_none()
+        if user is None:
+            await ctx.reply(f"No user found with Discord ID `{discord_id}`")
+            return
+
+        current_gameweek = db.execute(
+            select(func.max(Fixture.gameweek))
+        ).scalar_one_or_none()
+        if current_gameweek is None:
+            await ctx.reply("Gameweek does not exist yet")
+            return
+
+        if gameweek > current_gameweek:
+            await ctx.reply(f"Gameweek {gameweek} does not exist yet")
+            return
+        elif gameweek <= 0:
+            await ctx.reply("Gameweek cannot be below 1")
+            return
+
+        embed = discord.Embed(
+            title=f"{user.nickname.capitalize()}'s Predictions for Gameweek: `{gameweek}`",
+            color=discord.Color.gold(),
+        )
+
+        gameweek_predictions = (
+            db.execute(
+                select(Prediction)
+                .where(
+                    Prediction.discord_id == discord_id, Prediction.gameweek_id == gameweek
+                )
+                .order_by(Prediction.match_index)
+            )
+            .scalars()
+            .all()
+        )
+
+        gameweek_fixtures = (
+            db.execute(
+                select(Fixture)
+                .where(Fixture.gameweek == gameweek)
+                .order_by(Fixture.order_index)
+            )
+            .scalars()
+            .all()
+        )
+
+        pred_by_index = {p.match_index: p for p in gameweek_predictions}
+
+        embed_desc = []
+
+        for fixture in gameweek_fixtures:
+            p = pred_by_index.get(fixture.order_index)
+            if p is None:
+                embed_desc.append(
+                    f"**{fixture.home.title()}** vs **{fixture.away.title()}** – Predicted: `{None}-{None}`"
+                )
+            else:
+                embed_desc.append(
+                    f"**{fixture.home.title()}** vs **{fixture.away.title()}** – Predicted: `{p.prediction_home}-{p.prediction_away}`"
+                )
+
+        embed.description = "\n".join(embed_desc)
+        await ctx.reply(embed=embed)
 
 
 async def setup(bot: "PyBot"):
