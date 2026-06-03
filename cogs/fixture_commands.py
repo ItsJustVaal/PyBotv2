@@ -15,12 +15,15 @@ if TYPE_CHECKING:
 
 
 class FixtureCommands(commands.Cog):
+    """Cog for managing fixtures — admin commands for CRUD operations and a public command to view them."""
+
     def __init__(self, bot: "PyBot"):
         self.bot = bot
 
     @commands.command(hidden=True, name="setFixtures")
     @is_admin()
     async def set_fixtures(self, ctx: commands.Context):
+        """Bulk create fixtures for a gameweek. Usage: `.setFixtures <GW> "Home-Away" "Home-Away" ...`"""
         db: Session = ctx.bot.db
 
         args = shlex.split(ctx.message.content)
@@ -65,6 +68,7 @@ class FixtureCommands(commands.Cog):
     @commands.command(hidden=True, name="updateFixture")
     @is_admin()
     async def update_fixture(self, ctx: commands.Context):
+        """Update a single fixture's teams for a given gameweek. Usage: `.updateFixture <GW> "Old Home-Old Away" "New Home-New Away"`"""
         db: Session = ctx.bot.db
 
         args = shlex.split(ctx.message.content)
@@ -100,6 +104,7 @@ class FixtureCommands(commands.Cog):
     @commands.command(hidden=True, name="addFixture")
     @is_admin()
     async def add_fixture(self, ctx: commands.Context, gameweek: int, fixture_str: str):
+        """Append a new fixture to an existing gameweek. Usage: `.addFixture <GW> "Home-Away"`"""
         db: Session = ctx.bot.db
 
         home, away = fixture_str.strip('"').split("-")
@@ -128,6 +133,7 @@ class FixtureCommands(commands.Cog):
     async def delete_fixture(
         self, ctx: commands.Context, gameweek: int, fixture_str: str
     ):
+        """Delete a fixture from a gameweek and reindex the remaining fixtures. Usage: `.deleteFixture <GW> "Home-Away"`"""
         db: Session = ctx.bot.db
 
         home, away = fixture_str.strip('"').split("-")
@@ -173,6 +179,7 @@ class FixtureCommands(commands.Cog):
     async def get_fixtures(
         self, ctx: commands.Context, current_gameweek: int | None = None
     ):
+        """Display all fixtures for the current or specified gameweek."""
         message = ctx.message.content.split(" ")
         db: Session = ctx.bot.db
         if current_gameweek is None:
