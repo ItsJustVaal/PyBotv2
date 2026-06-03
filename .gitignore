@@ -3,3 +3,5 @@ notes.txt
 __pycache__
 data
 venv
+*.sql
+PybotV2.sqlite3
