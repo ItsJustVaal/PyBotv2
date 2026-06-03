@@ -8,7 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from db.models.fixtures import Fixture
-from decorators.helpers import ensure_user_exists, is_admin
+from decorators.helpers import ensure_user_exists, is_admin, season_active
 
 if TYPE_CHECKING:
     from bot import PyBot
@@ -176,6 +176,7 @@ class FixtureCommands(commands.Cog):
         help="Show fixtures, can pass in gameweek: `.fixtures 2` to see old fixtures",
     )
     @ensure_user_exists()
+    @season_active("The season is over, for WC use .wcFixtures")
     async def get_fixtures(
         self, ctx: commands.Context, current_gameweek: int | None = None
     ):

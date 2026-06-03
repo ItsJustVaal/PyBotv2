@@ -19,6 +19,18 @@ def is_admin():
     return commands.check(predicate)
 
 
+def season_active(message: str = "The season is over!"):
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(self, ctx: commands.Context, *args, **kwargs):
+            if ctx.bot.season_over:
+                await ctx.reply(message)
+                return
+            return await func(self, ctx, *args, **kwargs)
+        return wrapper
+    return decorator
+
+
 def ensure_user_exists():
     def decorator(func):
         @wraps(func)

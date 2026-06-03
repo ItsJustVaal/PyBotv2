@@ -16,6 +16,10 @@ class User(Base):
     money: Mapped[int] = mapped_column(Integer, default=0)
     gameweek_points: Mapped[int] = mapped_column(Integer, default=0)
     overall_points: Mapped[int] = mapped_column(Integer, default=0)
+    
+    wc_gameweek_points: Mapped[int] = mapped_column(Integer, default=0)
+    wc_overall_points: Mapped[int] = mapped_column(Integer, default=0)
+    
     free_packs: Mapped[int] = mapped_column(Integer, default=0)
     scrabble_wins: Mapped[int] = mapped_column(Integer, default=0)
 

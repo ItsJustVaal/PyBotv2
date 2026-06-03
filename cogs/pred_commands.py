@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from db.models.fixtures import Fixture
 from db.models.predictions import Prediction
 from db.models.users import User
-from decorators.helpers import ensure_user_exists, is_admin
+from decorators.helpers import ensure_user_exists, is_admin, season_active
 
 if TYPE_CHECKING:
     from bot import PyBot
@@ -23,6 +23,7 @@ class PredictionCommands(commands.Cog):
         help="Predict for the gameweek: `.predict 10-2 2-0 2-4 1-0`, will update None-None preds in order",
     )
     @ensure_user_exists()
+    @season_active("The season is over, for WC use .wcPredict")
     async def predict(self, ctx: commands.Context, *scores: str) -> None:
         if self.bot.locked:
             await ctx.reply("Locked lol noob")
@@ -99,6 +100,7 @@ class PredictionCommands(commands.Cog):
         help='Update a single pred. Usage: `.updatePred "Home-Away" 2-1`',
     )
     @ensure_user_exists()
+    @season_active("The season is over, for WC use .wcUpdatePred")
     async def update_prediction(self, ctx: commands.Context, *update: str) -> None:
         if self.bot.locked:
             await ctx.reply("Locked lol noob")

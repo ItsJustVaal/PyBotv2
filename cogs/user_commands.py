@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from db.models.fixtures import Fixture
 from db.models.predictions import Prediction
 from db.models.users import User
-from decorators.helpers import ensure_user_exists
+from decorators.helpers import ensure_user_exists, season_active
 
 if TYPE_CHECKING:
     from bot import PyBot
@@ -86,6 +86,7 @@ class UserCommands(commands.Cog):
         help="Shows users predictions for current or selected gameweek, `.mypred` or `.mypred 2` etc",
     )
     @ensure_user_exists()
+    @season_active("The season is over, for WC use .wcmypred")
     async def my_pred(self, ctx: commands.Context, gameweek: int | None = None) -> None:
         db: Session = ctx.bot.db
         user_id = str(ctx.author.id)

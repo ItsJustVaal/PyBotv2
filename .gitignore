@@ -5,3 +5,5 @@ data
 venv
 *.sql
 PybotV2.sqlite3
+*.sqlite3
+CLAUDE.md
