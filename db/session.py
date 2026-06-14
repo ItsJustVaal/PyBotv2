@@ -25,6 +25,8 @@ def migrate_db():
             conn.execute(text("ALTER TABLE users ADD COLUMN wc_overall_points INTEGER DEFAULT 0"))
 
         wc_fixture_cols = get_columns("wc_fixtures")
+        if wc_fixture_cols and "api_match_id" not in wc_fixture_cols:
+            conn.execute(text("ALTER TABLE wc_fixtures ADD COLUMN api_match_id INTEGER"))
         if wc_fixture_cols and "group" not in wc_fixture_cols:
             conn.execute(text("ALTER TABLE wc_fixtures ADD COLUMN \"group\" TEXT"))
 

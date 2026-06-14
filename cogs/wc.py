@@ -2,12 +2,12 @@
 import os
 import shlex
 from collections import defaultdict
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import aiohttp
 import discord
 from discord.ext import commands
-from sqlalchemy import and_, func, select, update
+from sqlalchemy import and_, delete, func, select, update
 from sqlalchemy.orm import Session
 
 from db.models.users import User
@@ -40,6 +40,28 @@ class WorldCupCommands(commands.Cog):
 
     def _get_current_gameweek(self, db: Session) -> int | None:
         return db.execute(select(func.max(WCFixture.gameweek))).scalar_one_or_none()
+
+    def _normalize_team_name(self, name: str | None) -> str:
+        return " ".join((name or "").strip().lower().split())
+
+    async def _fetch_api_json(
+        self,
+        session: aiohttp.ClientSession,
+        endpoint: str,
+        headers: dict[str, str],
+        **kwargs: Any,
+    ) -> tuple[dict[str, Any] | None, str | None]:
+        async with session.get(f"{API_BASE}{endpoint}", headers=headers, **kwargs) as resp:
+            try:
+                data = await resp.json(content_type=None)
+            except ValueError:
+                return None, f"API returned a non-JSON response ({resp.status}: {resp.reason})."
+            if resp.status >= 400:
+                message = data.get("message", resp.reason) if isinstance(data, dict) else resp.reason
+                return None, f"API request failed ({resp.status}): {message}"
+            if not isinstance(data, dict):
+                return None, "API returned an unexpected response."
+            return data, None
 
     def _build_grouped_embed(self, embed: discord.Embed, groups: dict) -> None:
         for i, group_name in enumerate(sorted(groups.keys())):
@@ -77,26 +99,23 @@ class WorldCupCommands(commands.Cog):
                 return
 
             async with aiohttp.ClientSession() as session:
-                async with session.get(f"{API_BASE}/competitions/WC", headers=headers) as resp:
-                    comp_data = await resp.json()
-                current_matchday = comp_data.get("currentSeason", {}).get("currentMatchday")
-                if current_matchday is None:
-                    await ctx.reply("Could not determine the current matchday from the API.")
-                    return
-                async with session.get(
-                    f"{API_BASE}/competitions/WC/matches",
+                match_data, error = await self._fetch_api_json(
+                    session,
+                    "/competitions/WC/matches",
                     headers=headers,
-                    params={"matchday": current_matchday},
-                ) as resp:
-                    match_data = await resp.json()
-
-            matches = match_data.get("matches", [])
+                    params={"matchday": gameweek},
+                )
+                if error:
+                    await ctx.reply(error)
+                    return
+            if match_data:
+                matches = match_data.get("matches", [])
             if not matches:
-                await ctx.reply(f"No fixtures found for matchday {current_matchday}.")
+                await ctx.reply(f"No fixtures found for matchday {gameweek}.")
                 return
 
             embed = discord.Embed(
-                title=f"World Cup Fixtures for Gameweek {gameweek} — Matchday {current_matchday}",
+                title=f"World Cup Fixtures for Gameweek {gameweek} — Matchday {gameweek}",
                 color=discord.Color.blue(),
             )
             groups: dict = defaultdict(list)
@@ -110,11 +129,12 @@ class WorldCupCommands(commands.Cog):
                 fixtures_str = []
                 for match in groups[group_name]:
                     db.add(WCFixture(
+                        api_match_id=match.get("id"),
                         order_index=order_index,
                         gameweek=gameweek,
                         group=group_name,
-                        home=match["homeTeam"]["name"].lower(),
-                        away=match["awayTeam"]["name"].lower(),
+                        home=self._normalize_team_name(match["homeTeam"]["name"]),
+                        away=self._normalize_team_name(match["awayTeam"]["name"]),
                     ))
                     fixtures_str.append(f"{match['homeTeam']['name']} vs {match['awayTeam']['name']}")
                     order_index += 1
@@ -136,13 +156,17 @@ class WorldCupCommands(commands.Cog):
             matches = []
             async with aiohttp.ClientSession() as session:
                 for s in stages_to_fetch:
-                    async with session.get(
-                        f"{API_BASE}/competitions/WC/matches",
+                    data, error = await self._fetch_api_json(
+                        session,
+                        "/competitions/WC/matches",
                         headers=headers,
                         params={"stage": s},
-                    ) as resp:
-                        data = await resp.json()
-                    matches.extend(data.get("matches", []))
+                    )
+                    if error:
+                        await ctx.reply(error)
+                        return
+                    if data:
+                        matches.extend(data.get("matches", []))
 
             if not matches:
                 await ctx.reply(f"No fixtures found for {display_name}.")
@@ -157,11 +181,12 @@ class WorldCupCommands(commands.Cog):
                 home = match["homeTeam"]["name"] or "TBD"
                 away = match["awayTeam"]["name"] or "TBD"
                 db.add(WCFixture(
+                    api_match_id=match.get("id"),
                     order_index=i,
                     gameweek=gameweek,
                     group=display_name,
-                    home=home.lower(),
-                    away=away.lower(),
+                    home=self._normalize_team_name(home),
+                    away=self._normalize_team_name(away),
                 ))
                 embed_desc.append(f"{home} vs {away}")
             embed.description = "\n".join(embed_desc)
@@ -429,6 +454,11 @@ class WorldCupCommands(commands.Cog):
                 f"No match found for `{home.title()} vs {away.title()}` in {round_display}"
             )
             return
+        elif current_fixture.result_added == 1:
+            await ctx.reply(
+                f"Sorry, `{home.title()} vs {away.title()}` in {round_display} already has a result"
+            )
+            return
         elif current_fixture.tallied == 1:
             await ctx.reply(
                 f"Sorry, `{home.title()} vs {away.title()}` in {round_display} has been tallied already"
@@ -621,14 +651,17 @@ class WorldCupCommands(commands.Cog):
         headers = {"X-Auth-Token": api_key}
 
         async with aiohttp.ClientSession() as session:
-            async with session.get(
-                f"{API_BASE}/competitions/WC/matches",
+            match_data, error = await self._fetch_api_json(
+                session,
+                "/competitions/WC/matches",
                 headers=headers,
                 params={"status": "FINISHED"},
-            ) as resp:
-                match_data = await resp.json()
-
-        matches = match_data.get("matches", [])
+            )
+            if error:
+                await ctx.reply(error)
+                return
+        if match_data:
+            matches = match_data.get("matches", [])
         if not matches:
             await ctx.reply("No finished WC matches found.")
             return
@@ -642,17 +675,20 @@ class WorldCupCommands(commands.Cog):
             .all()
         )
         fixture_lookup = {(f.home, f.away): f for f in pending_fixtures}
+        fixture_lookup_by_api_id = {
+            f.api_match_id: f for f in pending_fixtures if f.api_match_id is not None
+        }
 
         updated = []
         for match in matches:
-            home = match["homeTeam"]["name"].lower()
-            away = match["awayTeam"]["name"].lower()
+            home = self._normalize_team_name(match["homeTeam"]["name"])
+            away = self._normalize_team_name(match["awayTeam"]["name"])
             full_time = match["score"]["fullTime"]
 
             if full_time["home"] is None or full_time["away"] is None:
                 continue
 
-            fixture = fixture_lookup.get((home, away))
+            fixture = fixture_lookup_by_api_id.get(match.get("id")) or fixture_lookup.get((home, away))
             if fixture is None:
                 continue
 
@@ -876,8 +912,8 @@ class WorldCupCommands(commands.Cog):
             await ctx.reply("Fixture not found.")
             return
 
-        fixture.home = new_home.strip().lower()
-        fixture.away = new_away.strip().lower()
+        fixture.home = self._normalize_team_name(new_home)
+        fixture.away = self._normalize_team_name(new_away)
         db.commit()
         await ctx.reply(f"Updated: `{old_home.title()} vs {old_away.title()}` → `{new_home.title()} vs {new_away.title()}`")
 
@@ -911,8 +947,25 @@ class WorldCupCommands(commands.Cog):
             await ctx.reply("Fixture not found.")
             return
 
+        deleted_index = fixture.order_index
+        deleted_predictions = db.execute(
+            delete(WCPrediction).where(
+                WCPrediction.gameweek_id == gameweek,
+                WCPrediction.match_index == deleted_index,
+            )
+        )
+        db.execute(
+            update(WCPrediction)
+            .where(WCPrediction.gameweek_id == gameweek, WCPrediction.match_index > deleted_index)
+            .values(match_index=WCPrediction.match_index + 1000)
+        )
+        db.execute(
+            update(WCPrediction)
+            .where(WCPrediction.gameweek_id == gameweek, WCPrediction.match_index >= deleted_index + 1001)
+            .values(match_index=WCPrediction.match_index - 1001)
+        )
+
         db.delete(fixture)
-        db.commit()
 
         remaining = (
             db.execute(
@@ -925,7 +978,10 @@ class WorldCupCommands(commands.Cog):
             f.order_index = i
         db.commit()
 
-        await ctx.reply(f"Deleted `{home.title()} vs {away.title()}` and reindexed.")
+        await ctx.reply(
+            f"Deleted `{home.title()} vs {away.title()}`, removed "
+            f"{deleted_predictions.rowcount or 0} prediction(s), and reindexed."
+        )
 
 
 async def setup(bot: "PyBot"):

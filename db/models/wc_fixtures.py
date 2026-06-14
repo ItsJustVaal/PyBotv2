@@ -10,6 +10,7 @@ class WCFixture(Base):
     __tablename__ = "wc_fixtures"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    api_match_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     order_index: Mapped[int] = mapped_column(Integer, nullable=False)
 
     gameweek: Mapped[int] = mapped_column(Integer, nullable=False)
