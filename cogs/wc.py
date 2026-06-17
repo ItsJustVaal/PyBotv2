@@ -61,6 +61,33 @@ class WorldCupCommands(commands.Cog):
 
         return self._get_latest_gameweek(db)
 
+    def _select_prediction_gameweek(
+        self,
+        db: Session,
+        scores: tuple[str, ...],
+    ) -> tuple[int | None, str | None, tuple[str, ...], str | None]:
+        round_arg = scores[0] if scores else None
+        if round_arg in ("2", "3"):
+            current_gameweek = int(round_arg)
+            display = f"Gameweek: `{current_gameweek}`"
+            return current_gameweek, display, scores[1:], None
+
+        if round_arg is not None and round_arg.isdecimal():
+            return (
+                None,
+                None,
+                scores,
+                "Only gameweeks 2 or 3 can be selected directly. "
+                "Omit the round to predict the current gameweek.",
+            )
+
+        selected_gameweek = self._get_current_gameweek(db)
+        if selected_gameweek is None:
+            return None, None, scores, "No WC fixtures have been set up yet."
+
+        display = _GW_DISPLAY.get(selected_gameweek, f"Gameweek: `{selected_gameweek}`")
+        return selected_gameweek, display, scores, None
+
     def _get_latest_gameweek(self, db: Session) -> int | None:
         return db.execute(select(func.max(WCFixture.gameweek))).scalar_one_or_none()
 
@@ -184,7 +211,11 @@ class WorldCupCommands(commands.Cog):
                 await ctx.reply(f"Fixtures already exist for {display_name}.")
                 return
 
-            stages_to_fetch = ["THIRD_PLACE", "FINAL"] if round == "final" else [stage]
+            if round == "final":
+                stages_to_fetch = ["THIRD_PLACE", "FINAL"]
+            else:
+                assert stage is not None
+                stages_to_fetch = [stage]
             matches = []
             async with aiohttp.ClientSession() as session:
                 for s in stages_to_fetch:
@@ -297,19 +328,12 @@ class WorldCupCommands(commands.Cog):
         db: Session = ctx.bot.db
         user_id = str(ctx.author.id)
 
-        round_arg = scores[0] if scores else None
-        if round_arg in ("2", "3"):
-            current_gameweek = int(round_arg)
-            display = f"Gameweek: `{current_gameweek}`"
-            scores = scores[1:]
-        else:
-            if round_arg is not None and round_arg.isdecimal():
-                scores = scores[1:]
-            current_gameweek = self._get_current_gameweek(db)
-            if current_gameweek is None:
-                await ctx.reply("No WC fixtures have been set up yet.")
-                return
-            display = _GW_DISPLAY.get(current_gameweek, f"Gameweek: `{current_gameweek}`")
+        current_gameweek, display, scores, error = self._select_prediction_gameweek(db, scores)
+        if error is not None:
+            await ctx.reply(error)
+            return
+        assert current_gameweek is not None
+        assert display is not None
 
         current_fixtures = (
             db.execute(
