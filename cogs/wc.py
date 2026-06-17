@@ -39,7 +39,39 @@ class WorldCupCommands(commands.Cog):
         self.bot = bot
 
     def _get_current_gameweek(self, db: Session) -> int | None:
+        resulted_gameweeks = (
+            select(WCFixture.gameweek)
+            .where(WCFixture.result_added == 1)
+            .distinct()
+        )
+        active_gameweek = db.execute(
+            select(func.max(WCFixture.gameweek)).where(
+                WCFixture.result_added == 0,
+                WCFixture.gameweek.in_(resulted_gameweeks),
+            )
+        ).scalar_one_or_none()
+        if active_gameweek is not None:
+            return active_gameweek
+
+        next_open_gameweek = db.execute(
+            select(func.min(WCFixture.gameweek)).where(WCFixture.result_added == 0)
+        ).scalar_one_or_none()
+        if next_open_gameweek is not None:
+            return next_open_gameweek
+
+        return self._get_latest_gameweek(db)
+
+    def _get_latest_gameweek(self, db: Session) -> int | None:
         return db.execute(select(func.max(WCFixture.gameweek))).scalar_one_or_none()
+
+    def _parse_round(self, round: str) -> tuple[int, str] | None:
+        if round in ("1", "2", "3"):
+            gameweek = int(round)
+            return gameweek, f"Gameweek: `{gameweek}`"
+        if round in STAGE_MAP:
+            _, gameweek, display = STAGE_MAP[round]
+            return gameweek, display
+        return None
 
     def _normalize_team_name(self, name: str | None) -> str:
         return " ".join((name or "").strip().lower().split())
@@ -253,11 +285,11 @@ class WorldCupCommands(commands.Cog):
 
     @commands.command(
         name="wcPredict",
-        help="Predict WC scores for the gameweek: `.wcPredict 2-1 0-0 3-2`, will update in fixture order",
+        help="Predict WC scores: `.wcPredict 2-1 0-0` or `.wcPredict 2 1-1 1-1`, only 2 or 3 can select a future gameweek",
     )
     @ensure_user_exists()
     async def wc_predict(self, ctx: commands.Context, *scores: str) -> None:
-        """Submit predictions for all WC fixtures in the current gameweek."""
+        """Submit predictions for all open WC fixtures in the current or selected group gameweek."""
         if self.bot.locked:
             await ctx.reply("Locked lol noob")
             return
@@ -265,15 +297,30 @@ class WorldCupCommands(commands.Cog):
         db: Session = ctx.bot.db
         user_id = str(ctx.author.id)
 
-        current_gameweek = self._get_current_gameweek(db)
-        if current_gameweek is None:
-            await ctx.reply("No WC fixtures have been set up yet.")
-            return
+        round_arg = scores[0] if scores else None
+        if round_arg in ("2", "3"):
+            current_gameweek = int(round_arg)
+            display = f"Gameweek: `{current_gameweek}`"
+            scores = scores[1:]
+        else:
+            if round_arg is not None and round_arg.isdecimal():
+                scores = scores[1:]
+            current_gameweek = self._get_current_gameweek(db)
+            if current_gameweek is None:
+                await ctx.reply("No WC fixtures have been set up yet.")
+                return
+            display = _GW_DISPLAY.get(current_gameweek, f"Gameweek: `{current_gameweek}`")
 
         current_fixtures = (
             db.execute(
                 select(WCFixture)
-                .where(and_(WCFixture.gameweek == current_gameweek, WCFixture.tallied == 0, WCFixture.result_added == 0))
+                .where(
+                    and_(
+                        WCFixture.gameweek == current_gameweek,
+                        WCFixture.tallied == 0,
+                        WCFixture.result_added == 0,
+                    )
+                )
                 .order_by(WCFixture.order_index.asc())
             )
             .scalars()
@@ -281,12 +328,16 @@ class WorldCupCommands(commands.Cog):
         )
 
         if len(current_fixtures) == 0:
-            await ctx.reply("No open WC fixtures to predict — this round may already be tallied. Use .wcUpdatePred to change an existing prediction.")
+            await ctx.reply(
+                f"No open WC fixtures to predict for {display} — this round may already be tallied. "
+                "Use .wcUpdatePred to change an existing prediction."
+            )
             return
 
         if len(scores) != len(current_fixtures):
             await ctx.reply(
-                f"You must enter exactly {len(current_fixtures)} predictions. Use .wcUpdatePred to change a single prediction"
+                f"You must enter exactly {len(current_fixtures)} predictions for {display}. "
+                "Use .wcUpdatePred to change a single prediction"
             )
             return
 
@@ -344,24 +395,25 @@ class WorldCupCommands(commands.Cog):
         db: Session = ctx.bot.db
         user_id = str(ctx.author.id)
 
-        current_gameweek = self._get_current_gameweek(db)
-        if current_gameweek is None:
+        latest_gameweek = self._get_latest_gameweek(db)
+        if latest_gameweek is None:
             await ctx.reply("No WC gameweeks have been set yet.")
             return
 
         if round is None:
-            gameweek = current_gameweek
+            gameweek = self._get_current_gameweek(db)
+            if gameweek is None:
+                await ctx.reply("No WC gameweeks have been set yet.")
+                return
             display = _GW_DISPLAY.get(gameweek, f"Gameweek: `{gameweek}`")
-        elif round in ("1", "2", "3"):
-            gameweek = int(round)
-            display = f"Gameweek: `{gameweek}`"
-        elif round in STAGE_MAP:
-            _, gameweek, display = STAGE_MAP[round]
         else:
-            await ctx.reply("Invalid round. Use: `.wcmypred <1|2|3|32|16|8|4|final>`")
-            return
+            selected_round = self._parse_round(round)
+            if selected_round is None:
+                await ctx.reply("Invalid round. Use: `.wcmypred <1|2|3|32|16|8|4|final>`")
+                return
+            gameweek, display = selected_round
 
-        if gameweek > current_gameweek:
+        if gameweek > latest_gameweek:
             await ctx.reply(f"{display} does not exist yet")
             return
 
@@ -532,6 +584,7 @@ class WorldCupCommands(commands.Cog):
             act_outcome = (act_home > act_away) - (act_home < act_away)
             return 1 if pred_outcome == act_outcome else 0
 
+        processed_gameweeks = {fix.gameweek for _, fix in rows}
         tallied_fixture_ids = set()
         for pred, fix in rows:
             pts = score(
@@ -553,8 +606,11 @@ class WorldCupCommands(commands.Cog):
 
         db.commit()
 
-        current_gameweek = self._get_current_gameweek(db)
-        display = _GW_DISPLAY.get(current_gameweek, f"gameweek {current_gameweek}")
+        displays = [
+            _GW_DISPLAY.get(gameweek, f"gameweek {gameweek}")
+            for gameweek in sorted(processed_gameweeks)
+        ]
+        display = ", ".join(displays)
         await ctx.reply(f"WC points updated for {display}.")
 
     @commands.command(name="wcReset", hidden=True)
@@ -728,21 +784,18 @@ class WorldCupCommands(commands.Cog):
             await ctx.reply(f"No user found with Discord ID `{discord_id}`")
             return
 
-        current_gameweek = self._get_current_gameweek(db)
-        if current_gameweek is None:
+        latest_gameweek = self._get_latest_gameweek(db)
+        if latest_gameweek is None:
             await ctx.reply("No WC gameweeks exist yet")
             return
 
-        if round in ("1", "2", "3"):
-            gameweek = int(round)
-            display = f"Gameweek: `{gameweek}`"
-        elif round in STAGE_MAP:
-            _, gameweek, display = STAGE_MAP[round]
-        else:
+        selected_round = self._parse_round(round)
+        if selected_round is None:
             await ctx.reply("Invalid round. Use: `.wcViewPred <discord_id> <1|2|3|32|16|8|4|final>`")
             return
+        gameweek, display = selected_round
 
-        if gameweek > current_gameweek:
+        if gameweek > latest_gameweek:
             await ctx.reply(f"{display} does not exist yet")
             return
 
