@@ -571,6 +571,135 @@ class WorldCupCommands(commands.Cog):
 
         db.commit()
 
+    @commands.command(
+        hidden=True,
+        name="wcUpdateUserPred",
+        help=(
+            'Admin: update a user WC pred. Usage: '
+            '`.wcUpdateUserPred <discord_id> <round> "Home" "Away" 2-1`'
+        ),
+    )
+    @is_admin()
+    async def wc_update_user_prediction(
+        self,
+        ctx: commands.Context,
+        discord_id: str | None = None,
+        round: str | None = None,
+        home: str | None = None,
+        away: str | None = None,
+        score: str | None = None,
+    ) -> None:
+        """Admin: update a user's WC prediction by Discord ID, round, and match name."""
+        usage = (
+            'Usage: `.wcUpdateUserPred <discord_id> <1|2|3|32|16|8|4|final> '
+            '"Home" "Away" 2-1`'
+        )
+        if None in (discord_id, round, home, away, score):
+            await ctx.reply(usage)
+            return
+
+        assert discord_id is not None
+        assert round is not None
+        assert home is not None
+        assert away is not None
+        assert score is not None
+
+        db: Session = ctx.bot.db
+        discord_id = discord_id.strip("<@!>")
+
+        user = db.execute(
+            select(User).where(User.discord_id == discord_id)
+        ).scalar_one_or_none()
+        if user is None:
+            await ctx.reply(f"No user found with Discord ID `{discord_id}`")
+            return
+
+        selected_round = self._parse_round(round)
+        if selected_round is None:
+            await ctx.reply(
+                "Invalid round. Use: `.wcUpdateUserPred <discord_id> "
+                '<1|2|3|32|16|8|4|final> "Home" "Away" 2-1`'
+            )
+            return
+        gameweek, display = selected_round
+
+        latest_gameweek = self._get_latest_gameweek(db)
+        if latest_gameweek is None:
+            await ctx.reply("No WC fixtures have been set up yet.")
+            return
+        if gameweek > latest_gameweek:
+            await ctx.reply(f"{display} does not exist yet")
+            return
+
+        try:
+            home_score, away_score = map(int, score.split("-"))
+        except ValueError:
+            await ctx.reply(
+                'Invalid score format. Use: `.wcUpdateUserPred <discord_id> '
+                '<round> "Home" "Away" 2-1`'
+            )
+            return
+
+        normalized_home = self._normalize_team_name(home)
+        normalized_away = self._normalize_team_name(away)
+
+        current_fixture = db.execute(
+            select(WCFixture).where(
+                and_(
+                    WCFixture.gameweek == gameweek,
+                    WCFixture.home == normalized_home,
+                    WCFixture.away == normalized_away,
+                )
+            )
+        ).scalar_one_or_none()
+
+        if not current_fixture:
+            await ctx.reply(
+                f"No match found for `{normalized_home.title()} vs {normalized_away.title()}` in {display}"
+            )
+            return
+        elif current_fixture.result_added == 1:
+            await ctx.reply(
+                f"Sorry, `{current_fixture.home.title()} vs {current_fixture.away.title()}` in {display} already has a result"
+            )
+            return
+        elif current_fixture.tallied == 1:
+            await ctx.reply(
+                f"Sorry, `{current_fixture.home.title()} vs {current_fixture.away.title()}` in {display} has been tallied already"
+            )
+            return
+
+        current_prediction = db.execute(
+            select(WCPrediction).where(
+                and_(
+                    WCPrediction.discord_id == discord_id,
+                    WCPrediction.gameweek_id == gameweek,
+                    WCPrediction.match_index == current_fixture.order_index,
+                )
+            )
+        ).scalar_one_or_none()
+
+        if current_prediction:
+            current_prediction.prediction_home = home_score
+            current_prediction.prediction_away = away_score
+            action = "Updated"
+        else:
+            db.add(WCPrediction(
+                discord_id=discord_id,
+                gameweek_id=gameweek,
+                match_index=current_fixture.order_index,
+                prediction_home=home_score,
+                prediction_away=away_score,
+            ))
+            action = "Added"
+
+        db.commit()
+        await ctx.reply(
+            f"{action} {user.nickname.capitalize()}'s prediction for "
+            f"`{current_fixture.home.title()} vs {current_fixture.away.title()}` "
+            f"in {display} to `{home_score}-{away_score}`"
+        )
+
     @commands.command(hidden=True, name="wcUpdatePoints")
     @is_admin()
     async def wc_update_points(self, ctx: commands.Context) -> None:
