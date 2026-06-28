@@ -120,10 +120,19 @@ class PyBot(commands.Bot):
 
         self.logger.error(f"[ERROR] {ctx.command} by {ctx.author}: {error}")
 
-        if isinstance(error, commands.CheckFailure):
-            await ctx.reply("Nice try loser")
-        else:
+        if isinstance(error, commands.CommandNotFound):
             await ctx.reply("That ain't a command noob.")
+        elif isinstance(error, commands.CheckFailure):
+            await ctx.reply("Nice try loser")
+        elif isinstance(error, commands.CommandInvokeError):
+            original = error.original
+            self.logger.error(
+                f"[COMMAND FAILED] {ctx.command} by {ctx.author}: {type(original).__name__}: {original}",
+                exc_info=original,
+            )
+            await ctx.reply(f"Command failed: `{type(original).__name__}: {original}`")
+        else:
+            await ctx.reply(f"Command failed: `{type(error).__name__}: {error}`")
 
 
 # Instantiate a bot

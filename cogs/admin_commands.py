@@ -10,6 +10,7 @@ from discord.ext import commands
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from db.session import engine
 from db.models.config import Config
 from decorators.helpers import is_admin
 
@@ -117,11 +118,23 @@ class AdminCommands(commands.Cog):
         os.makedirs("db/broken", exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         broken_dest = f"db/broken/PybotV2_broken_{timestamp}.sqlite3"
+
+        await ctx.author.send(
+            f"Restoring from `{restore_src}`.\n"
+            f"Current DB will be saved as `{broken_dest}`.\n"
+            "Restarting to apply restored database..."
+        )
+        await ctx.message.delete()
+
+        ctx.bot.auto_backup.cancel()
+        if ctx.bot._db is not None:
+            ctx.bot._db.close()
+            ctx.bot._db = None
+        engine.dispose()
+
         shutil.move(src, broken_dest)
         shutil.copy2(restore_src, src)
 
-        await ctx.author.send(f"Restored from `{restore_src}`.\nBroken DB saved as `{broken_dest}`.\nRestarting to apply new database...")
-        await ctx.message.delete()
         os.execv(sys.executable, [sys.executable] + sys.argv)
 
 
