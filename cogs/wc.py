@@ -103,6 +103,71 @@ class WorldCupCommands(commands.Cog):
     def _normalize_team_name(self, name: str | None) -> str:
         return " ".join((name or "").strip().lower().split())
 
+    def _score_prediction(
+        self,
+        pred_home: int,
+        pred_away: int,
+        act_home: int,
+        act_away: int,
+    ) -> int:
+        if pred_home == act_home and pred_away == act_away:
+            return 3
+        pred_outcome = (pred_home > pred_away) - (pred_home < pred_away)
+        act_outcome = (act_home > act_away) - (act_home < act_away)
+        return 1 if pred_outcome == act_outcome else 0
+
+    def _get_gameweek_standings(
+        self,
+        db: Session,
+        current_gameweek: int | None,
+    ) -> list[tuple[User, int]]:
+        if current_gameweek is None:
+            return []
+
+        rows = db.execute(
+            select(User, WCPrediction, WCFixture)
+            .join(WCPrediction, User.discord_id == WCPrediction.discord_id)
+            .join(
+                WCFixture,
+                and_(
+                    WCFixture.gameweek == WCPrediction.gameweek_id,
+                    WCFixture.order_index == WCPrediction.match_index,
+                ),
+            )
+            .where(WCPrediction.gameweek_id == current_gameweek)
+        ).all()
+
+        standings: dict[str, dict[str, Any]] = {}
+        for user, pred, fixture in rows:
+            row = standings.setdefault(
+                user.discord_id,
+                {"user": user, "points": 0, "first_pred": pred.updated_at},
+            )
+            if pred.updated_at is not None and (
+                row["first_pred"] is None or pred.updated_at > row["first_pred"]
+            ):
+                row["first_pred"] = pred.updated_at
+
+            if fixture.result_added == 1:
+                row["points"] += self._score_prediction(
+                    pred.prediction_home,
+                    pred.prediction_away,
+                    fixture.home_score,
+                    fixture.away_score,
+                )
+
+        return [
+            (row["user"], row["points"])
+            for row in sorted(
+                standings.values(),
+                key=lambda row: (
+                    -row["points"],
+                    row["first_pred"] is not None,
+                    row["first_pred"],
+                ),
+            )
+        ]
+
     async def _fetch_api_json(
         self,
         session: aiohttp.ClientSession,
@@ -730,17 +795,10 @@ class WorldCupCommands(commands.Cog):
             for u in db.execute(select(User)).scalars().all()
         }
 
-        def score(pred_home, pred_away, act_home, act_away) -> int:
-            if pred_home == act_home and pred_away == act_away:
-                return 3
-            pred_outcome = (pred_home > pred_away) - (pred_home < pred_away)
-            act_outcome = (act_home > act_away) - (act_home < act_away)
-            return 1 if pred_outcome == act_outcome else 0
-
         processed_gameweeks = {fix.gameweek for _, fix in rows}
         tallied_fixture_ids = set()
         for pred, fix in rows:
-            pts = score(
+            pts = self._score_prediction(
                 pred.prediction_home,
                 pred.prediction_away,
                 fix.home_score,
@@ -794,38 +852,15 @@ class WorldCupCommands(commands.Cog):
             .subquery()
         )
 
-        # Gameweek: tiebreak by latest update for current gameweek preds only
-        gw_pred_subq = (
-            select(WCPrediction.discord_id, func.max(WCPrediction.updated_at).label("first_pred"))
-            .where(WCPrediction.gameweek_id == current_gameweek)
-            .group_by(WCPrediction.discord_id)
-            .subquery()
-        )
-
         overall_ids = {
             row[0] for row in db.execute(select(WCPrediction.discord_id).distinct()).all()
-        }
-        gw_ids = {
-            row[0] for row in db.execute(
-                select(WCPrediction.discord_id).distinct()
-                .where(WCPrediction.gameweek_id == current_gameweek)
-            ).all()
         }
 
         if not overall_ids:
             await ctx.reply("No WC predictions have been made yet.")
             return
 
-        users_gameweek = (
-            db.execute(
-                select(User)
-                .join(gw_pred_subq, User.discord_id == gw_pred_subq.c.discord_id)
-                .where(User.discord_id.in_(gw_ids))
-                .order_by(User.wc_gameweek_points.desc(), gw_pred_subq.c.first_pred.asc())
-            )
-            .scalars()
-            .all()
-        )
+        users_gameweek = self._get_gameweek_standings(db, current_gameweek)
 
         users_overall = (
             db.execute(
@@ -839,7 +874,7 @@ class WorldCupCommands(commands.Cog):
         )
 
         embed = discord.Embed(title="WC Prediction Standings", color=discord.Color.gold())
-        gw_value = "\n".join(f"{u.nickname.capitalize()}: {u.wc_gameweek_points}" for u in users_gameweek)
+        gw_value = "\n".join(f"{u.nickname.capitalize()}: {points}" for u, points in users_gameweek)
         embed.add_field(name="Gameweek", value=gw_value if gw_value else "No predictions for this round yet")
         embed.add_field(
             name="Overall",

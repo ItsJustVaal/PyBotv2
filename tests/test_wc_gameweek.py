@@ -1,4 +1,5 @@
 import unittest
+from datetime import datetime
 from types import SimpleNamespace
 from typing import Any
 
@@ -7,7 +8,9 @@ from sqlalchemy.orm import Session
 
 from cogs.wc import WorldCupCommands
 from db.models.base import Base
+from db.models.users import User
 from db.models.wc_fixtures import WCFixture
+from db.models.wc_predictions import WCPrediction
 
 
 def add_fixture(
@@ -17,6 +20,8 @@ def add_fixture(
     *,
     result_added: int = 0,
     tallied: int = 0,
+    home_score: int = 0,
+    away_score: int = 0,
 ) -> None:
     db.add(
         WCFixture(
@@ -27,6 +32,33 @@ def add_fixture(
             away=f"away-{gameweek}-{order_index}",
             result_added=result_added,
             tallied=tallied,
+            home_score=home_score,
+            away_score=away_score,
+        )
+    )
+
+
+def add_user(db: Session, discord_id: str, nickname: str) -> None:
+    db.add(User(discord_id=discord_id, nickname=nickname))
+
+
+def add_prediction(
+    db: Session,
+    discord_id: str,
+    gameweek: int,
+    match_index: int,
+    home_score: int,
+    away_score: int,
+    updated_at: datetime,
+) -> None:
+    db.add(
+        WCPrediction(
+            discord_id=discord_id,
+            gameweek_id=gameweek,
+            match_index=match_index,
+            prediction_home=home_score,
+            prediction_away=away_score,
+            updated_at=updated_at,
         )
     )
 
@@ -116,6 +148,37 @@ class WorldCupGameweekTests(unittest.TestCase):
 
         selected = self.cog._select_prediction_gameweek(self.db, ("1-0",))
         self.assertEqual(selected, (2, "Gameweek: `2`", ("1-0",), None))
+
+    def test_gameweek_standings_are_computed_after_stored_points_are_reset(self) -> None:
+        add_user(self.db, "1", "alice")
+        add_user(self.db, "2", "bob")
+        add_fixture(self.db, 1, 0, result_added=1, tallied=1, home_score=2, away_score=1)
+        add_fixture(self.db, 1, 1, result_added=1, tallied=1, home_score=0, away_score=0)
+        add_prediction(self.db, "1", 1, 0, 2, 1, datetime(2026, 6, 1, 12, 0))
+        add_prediction(self.db, "1", 1, 1, 1, 1, datetime(2026, 6, 1, 12, 1))
+        add_prediction(self.db, "2", 1, 0, 1, 0, datetime(2026, 6, 1, 12, 2))
+        add_prediction(self.db, "2", 1, 1, 0, 1, datetime(2026, 6, 1, 12, 3))
+        self.db.commit()
+
+        for user in self.db.query(User).all():
+            user.wc_gameweek_points = 0
+        self.db.commit()
+
+        standings = self.cog._get_gameweek_standings(self.db, 1)
+
+        self.assertEqual([(user.nickname, points) for user, points in standings], [("alice", 4), ("bob", 1)])
+
+    def test_gameweek_standings_keep_latest_prediction_tiebreak(self) -> None:
+        add_user(self.db, "1", "alice")
+        add_user(self.db, "2", "bob")
+        add_fixture(self.db, 1, 0, result_added=1, tallied=1, home_score=2, away_score=1)
+        add_prediction(self.db, "1", 1, 0, 1, 0, datetime(2026, 6, 1, 12, 0))
+        add_prediction(self.db, "2", 1, 0, 1, 0, datetime(2026, 6, 1, 12, 1))
+        self.db.commit()
+
+        standings = self.cog._get_gameweek_standings(self.db, 1)
+
+        self.assertEqual([(user.nickname, points) for user, points in standings], [("alice", 1), ("bob", 1)])
 
 
 if __name__ == "__main__":
