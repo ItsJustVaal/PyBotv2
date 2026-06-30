@@ -61,6 +61,17 @@ class WorldCupCommands(commands.Cog):
 
         return self._get_latest_gameweek(db)
 
+    def _get_current_result_gameweek(self, db: Session) -> int | None:
+        untallied_results_gameweek = db.execute(
+            select(func.max(WCFixture.gameweek)).where(
+                WCFixture.result_added == 1,
+                WCFixture.tallied == 0,
+            )
+        ).scalar_one_or_none()
+        if untallied_results_gameweek is not None:
+            return untallied_results_gameweek
+        return self._get_current_gameweek(db)
+
     def _select_prediction_gameweek(
         self,
         db: Session,
@@ -115,6 +126,20 @@ class WorldCupCommands(commands.Cog):
         pred_outcome = (pred_home > pred_away) - (pred_home < pred_away)
         act_outcome = (act_home > act_away) - (act_home < act_away)
         return 1 if pred_outcome == act_outcome else 0
+
+    def _get_full_time_score(self, match: dict[str, Any]) -> tuple[int, int] | None:
+        score = match.get("score") or {}
+        regular_time = score.get("regularTime") or {}
+        full_time = score.get("fullTime") or {}
+        score_to_use = regular_time if (
+            regular_time.get("home") is not None and regular_time.get("away") is not None
+        ) else full_time
+
+        home_score = score_to_use.get("home")
+        away_score = score_to_use.get("away")
+        if home_score is None or away_score is None:
+            return None
+        return int(home_score), int(away_score)
 
     def _get_gameweek_standings(
         self,
@@ -904,8 +929,7 @@ class WorldCupCommands(commands.Cog):
             if error:
                 await ctx.reply(error)
                 return
-        if match_data:
-            matches = match_data.get("matches", [])
+        matches = match_data.get("matches", []) if match_data else []
         if not matches:
             await ctx.reply("No finished WC matches found.")
             return
@@ -927,19 +951,19 @@ class WorldCupCommands(commands.Cog):
         for match in matches:
             home = self._normalize_team_name(match["homeTeam"]["name"])
             away = self._normalize_team_name(match["awayTeam"]["name"])
-            full_time = match["score"]["fullTime"]
-
-            if full_time["home"] is None or full_time["away"] is None:
+            full_time_score = self._get_full_time_score(match)
+            if full_time_score is None:
                 continue
+            home_score, away_score = full_time_score
 
             fixture = fixture_lookup_by_api_id.get(match.get("id")) or fixture_lookup.get((home, away))
             if fixture is None:
                 continue
 
-            fixture.home_score = full_time["home"]
-            fixture.away_score = full_time["away"]
+            fixture.home_score = home_score
+            fixture.away_score = away_score
             fixture.result_added = 1
-            updated.append(f"{match['homeTeam']['name']} {full_time['home']}–{full_time['away']} {match['awayTeam']['name']}")
+            updated.append(f"{match['homeTeam']['name']} {home_score}–{away_score} {match['awayTeam']['name']}")
 
         if not updated:
             await ctx.reply("No new results to update.")
@@ -953,6 +977,69 @@ class WorldCupCommands(commands.Cog):
         )
         embed.description = "\n".join(updated)
         await ctx.reply(embed=embed)
+
+    @commands.command(hidden=True, name="wcUpdateResult")
+    @is_admin()
+    async def wc_update_result(self, ctx: commands.Context, *args: str) -> None:
+        """Admin: update one WC result in the current gameweek. Usage: `.wcUpdateResult "Home" "Away" 2-1`"""
+        usage = 'Usage: `.wcUpdateResult "Home" "Away" 2-1` or `.wcUpdateResult "Home-Away" 2-1`'
+        if len(args) == 2:
+            try:
+                home, away = args[0].split("-", 1)
+                score = args[1]
+            except ValueError:
+                await ctx.reply(usage)
+                return
+        elif len(args) == 3:
+            home, away, score = args
+        else:
+            await ctx.reply(usage)
+            return
+
+        try:
+            home_score, away_score = map(int, score.split("-"))
+        except ValueError:
+            await ctx.reply(usage)
+            return
+
+        db: Session = ctx.bot.db
+        current_gameweek = self._get_current_result_gameweek(db)
+        if current_gameweek is None:
+            await ctx.reply("No WC fixtures have been set up yet.")
+            return
+
+        normalized_home = self._normalize_team_name(home)
+        normalized_away = self._normalize_team_name(away)
+        fixture = db.execute(
+            select(WCFixture).where(
+                and_(
+                    WCFixture.gameweek == current_gameweek,
+                    WCFixture.home == normalized_home,
+                    WCFixture.away == normalized_away,
+                )
+            )
+        ).scalar_one_or_none()
+
+        round_display = _GW_DISPLAY.get(current_gameweek, f"Gameweek {current_gameweek}")
+        if fixture is None:
+            await ctx.reply(
+                f"No match found for `{normalized_home.title()} vs {normalized_away.title()}` in {round_display}"
+            )
+            return
+
+        fixture.home_score = home_score
+        fixture.away_score = away_score
+        fixture.result_added = 1
+        db.commit()
+
+        await ctx.reply(
+            f"Updated `{fixture.home.title()} vs {fixture.away.title()}` in "
+            f"{round_display} to `{home_score}-{away_score}`"
+        )
+        await ctx.invoke(
+            self.bot.get_command("wcResults"),  # type: ignore
+            round=_GW_TO_ROUND.get(current_gameweek, str(current_gameweek)),
+        )
 
     @commands.command(name="wcViewPred", hidden=True)
     @is_admin()

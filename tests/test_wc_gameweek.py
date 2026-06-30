@@ -119,6 +119,14 @@ class WorldCupGameweekTests(unittest.TestCase):
 
         self.assertEqual(self.cog._get_current_gameweek(self.db), 3)
 
+    def test_current_result_gameweek_prefers_untallied_results(self) -> None:
+        add_fixture(self.db, 1, 0, result_added=1, tallied=0)
+        add_fixture(self.db, 1, 1, result_added=1, tallied=0)
+        add_fixture(self.db, 2, 0)
+        self.db.commit()
+
+        self.assertEqual(self.cog._get_current_result_gameweek(self.db), 1)
+
     def test_prediction_week_can_select_future_group_round_two_or_three(self) -> None:
         add_fixture(self.db, 1, 0)
         self.db.commit()
@@ -179,6 +187,28 @@ class WorldCupGameweekTests(unittest.TestCase):
         standings = self.cog._get_gameweek_standings(self.db, 1)
 
         self.assertEqual([(user.nickname, points) for user, points in standings], [("alice", 1), ("bob", 1)])
+
+    def test_full_time_score_prefers_regular_time_over_extra_time(self) -> None:
+        match = {
+            "score": {
+                "fullTime": {"home": 2, "away": 1},
+                "regularTime": {"home": 1, "away": 1},
+                "extraTime": {"home": 2, "away": 1},
+                "penalties": {"home": 4, "away": 3},
+            }
+        }
+
+        self.assertEqual(self.cog._get_full_time_score(match), (1, 1))
+
+    def test_full_time_score_falls_back_to_full_time(self) -> None:
+        match = {
+            "score": {
+                "fullTime": {"home": 3, "away": 0},
+                "regularTime": {"home": None, "away": None},
+            }
+        }
+
+        self.assertEqual(self.cog._get_full_time_score(match), (3, 0))
 
 
 if __name__ == "__main__":
