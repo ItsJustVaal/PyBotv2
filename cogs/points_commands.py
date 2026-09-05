@@ -2,7 +2,7 @@ from typing import TYPE_CHECKING
 
 import discord
 from discord.ext import commands
-from sqlalchemy import and_, func, select, update
+from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from db.models.fixtures import Fixture
@@ -131,20 +131,49 @@ class PointsCommands(commands.Cog):
     async def standings(self, ctx: commands.Context):
         db: Session = ctx.bot.db
 
+        current_gameweek = db.execute(select(func.max(Fixture.gameweek))).scalar_one_or_none()
+        # Match WC: earlier latest submission/update wins when points are tied.
+        overall_predictions = (
+            select(Prediction.discord_id, func.max(Prediction.updated_at).label("latest_prediction"))
+            .group_by(Prediction.discord_id)
+            .subquery()
+        )
+        gameweek_predictions = (
+            select(Prediction.discord_id, func.max(Prediction.updated_at).label("latest_prediction"))
+            .where(Prediction.gameweek_id == current_gameweek)
+            .group_by(Prediction.discord_id)
+            .subquery()
+        )
+
         all_users_gameweek = (
-            db.execute(select(User).order_by(User.gameweek_points.desc()))
+            db.execute(
+                select(User)
+                .outerjoin(gameweek_predictions, User.discord_id == gameweek_predictions.c.discord_id)
+                .where(or_(User.gameweek_points != 0, gameweek_predictions.c.discord_id.is_not(None)))
+                .order_by(
+                    User.gameweek_points.desc(),
+                    gameweek_predictions.c.latest_prediction.asc().nulls_last(),
+                    User.discord_id.asc(),
+                )
+            )
             .scalars()
             .all()
         )
 
         all_users_overall = (
-            db.execute(select(User).order_by(User.overall_points.desc()))
+            db.execute(
+                select(User)
+                .outerjoin(overall_predictions, User.discord_id == overall_predictions.c.discord_id)
+                .where(or_(User.overall_points != 0, overall_predictions.c.discord_id.is_not(None)))
+                .order_by(
+                    User.overall_points.desc(),
+                    overall_predictions.c.latest_prediction.asc().nulls_last(),
+                    User.discord_id.asc(),
+                )
+            )
             .scalars()
             .all()
         )
-
-        embed_desc_gameweek = []
-        embed_desc_overall = []
 
         embed_desc_gameweek = [
             f"{u.nickname.capitalize()}: {u.gameweek_points}"
@@ -157,8 +186,8 @@ class PointsCommands(commands.Cog):
 
         embed = discord.Embed(title="Leaderboard")
 
-        embed.add_field(name="Gameweek", value="\n".join(embed_desc_gameweek))
-        embed.add_field(name="Overall", value="\n".join(embed_desc_overall))
+        embed.add_field(name="Gameweek", value="\n".join(embed_desc_gameweek) or "No predictions for this gameweek yet")
+        embed.add_field(name="Overall", value="\n".join(embed_desc_overall) or "No predictions have been made yet")
 
         await ctx.reply(embed=embed)
 
