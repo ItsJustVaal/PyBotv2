@@ -12,6 +12,7 @@ from sqlalchemy.exc import InvalidRequestError
 from config import ALLOWED_CHANNELS, TOKEN
 from db.models.config import Config
 from db.session import SessionLocal, init_db, migrate_db
+from db.seasons import ensure_active_season_tables, set_active_season
 
 # ~~~~ SET INTENTS ~~~~
 intents: discord.Intents = discord.Intents.default()
@@ -29,6 +30,7 @@ class PyBot(commands.Bot):
         self._db = None  # type: ignore
         self.locked = False
         self.season_over = False
+        self.active_season = None
         self.add_check(self.global_channel_check)
 
         # ~~~~ SET LOGGING ~~~~
@@ -66,6 +68,13 @@ class PyBot(commands.Bot):
             select(Config).where(Config.key == "season_over")
         ).scalar_one_or_none()
         self.season_over = config_row.value == "true" if config_row else False
+        season_row = self.db.execute(
+            select(Config).where(Config.key == "active_season")
+        ).scalar_one_or_none()
+        if season_row:
+            self.active_season = int(season_row.value)
+            ensure_active_season_tables(self.db, self.active_season)
+            set_active_season(self.active_season)
         self.logger.info("[STARTUP] Loading Cogs")
         for file in os.listdir("cogs"):
             if file.endswith(".py") and file != "__init__.py":

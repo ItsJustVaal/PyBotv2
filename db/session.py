@@ -3,8 +3,10 @@ from sqlalchemy.orm import sessionmaker
 
 from config import DATABASE_URL
 from db.models import *
+from db.seasons import install_season_routing
 
 engine = create_engine(DATABASE_URL, echo=False, future=True)  # type: ignore
+install_season_routing(engine)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 

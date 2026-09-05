@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from db.session import engine
 from db.models.config import Config
+from db.seasons import start_new_season
 from decorators.helpers import is_admin
 
 if TYPE_CHECKING:
@@ -67,6 +68,36 @@ class AdminCommands(commands.Cog):
                 db.add(Config(key="season_over", value="true"))
             db.commit()
             await ctx.reply("Season ended")
+
+    @commands.command(hidden=True, name="newSeason")
+    @is_admin()
+    async def new_season(self, ctx: commands.Context, year: int | None = None):
+        """Start a new prediction season. Usage: `.newSeason 2026`"""
+        if year is None:
+            await ctx.reply("Usage: `.newSeason 2026`")
+            return
+
+        db: Session = ctx.bot.db
+        try:
+            change = start_new_season(db, year)
+        except ValueError as exc:
+            await ctx.reply(str(exc))
+            return
+
+        self.bot.season_over = False
+        self.bot.active_season = year
+
+        created = ", ".join(change.created_tables) if change.created_tables else "none"
+        existing = ", ".join(change.existing_tables) if change.existing_tables else "none"
+        archived = ", ".join(change.archived_tables) if change.archived_tables else "none"
+
+        await ctx.reply(
+            f"Season `{year}` is now active.\n"
+            f"Created tables: `{created}`\n"
+            f"Existing tables reused: `{existing}`\n"
+            f"Archived old unseasoned data: `{archived}`\n"
+            "Normal season points were reset."
+        )
 
     @commands.command(hidden=True)
     @is_admin()
